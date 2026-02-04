@@ -1,5 +1,5 @@
 {
-  "name": "@cks-systems/manifest-sdk",
+  "name": "@bonasa-tech/manifest-sdk",
   "version": "0.2.39",
   "files": [
     "dist/",
@@ -18,7 +18,7 @@
     "clob"
   ],
   "author": "CKS Systems",
-  "repository": "https://github.com/CKS-Systems/manifest",
+  "repository": "https://github.com/Bonasa-Tech/manifest",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/src/index.d.ts",
