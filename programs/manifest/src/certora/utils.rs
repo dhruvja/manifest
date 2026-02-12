@@ -82,26 +82,23 @@ macro_rules! deposit {
 }
 
 #[macro_export]
-/// Return the base token vault
+/// Return the base token vault (returns Pubkey::default() in perps since base is virtual)
 macro_rules! get_base_vault {
     ($market_acc_info:expr) => {{
-        let market_data: &mut std::cell::RefMut<&mut [u8]> =
-            &mut $market_acc_info.try_borrow_mut_data().unwrap();
-        let dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
-        let DynamicAccount { fixed, .. } = dynamic_account;
-        *fixed.get_base_vault()
+        solana_program::pubkey::Pubkey::default()
     }};
 }
 #[macro_export]
 
-/// Return the quote token vault
+/// Return the quote token vault (derived from market key and quote mint)
 macro_rules! get_quote_vault {
     ($market_acc_info:expr) => {{
         let market_data: &mut std::cell::RefMut<&mut [u8]> =
             &mut $market_acc_info.try_borrow_mut_data().unwrap();
         let dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
         let DynamicAccount { fixed, .. } = dynamic_account;
-        *fixed.get_quote_vault()
+        let (vault, _) = crate::validation::get_vault_address($market_acc_info.key, fixed.get_quote_mint());
+        vault
     }};
 }
 

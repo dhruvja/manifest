@@ -1,6 +1,5 @@
 use std::mem::size_of;
 
-#[cfg(feature = "certora")]
 use crate::quantities::WrapperU64;
 use crate::quantities::{BaseAtoms, QuoteAtoms};
 use bytemuck::{Pod, Zeroable};
@@ -42,6 +41,28 @@ impl ClaimedSeat {
             trader,
             ..Default::default()
         }
+    }
+
+    /// Get position size for perps markets.
+    /// Positive = long, negative = short. Stored as i64 in the quote_volume field.
+    pub fn get_position_size(&self) -> i64 {
+        self.quote_volume.as_u64() as i64
+    }
+
+    /// Set position size for perps markets.
+    pub fn set_position_size(&mut self, size: i64) {
+        self.quote_volume = QuoteAtoms::new(size as u64);
+    }
+
+    /// Get quote cost basis for perps (total USDC spent to acquire position).
+    /// Stored in the _padding field as u64 little-endian.
+    pub fn get_quote_cost_basis(&self) -> u64 {
+        u64::from_le_bytes(self._padding)
+    }
+
+    /// Set quote cost basis for perps.
+    pub fn set_quote_cost_basis(&mut self, cost_basis: u64) {
+        self._padding = cost_basis.to_le_bytes();
     }
 }
 

@@ -326,6 +326,12 @@ pub(crate) fn process_batch_update_core(
             let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
             let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
 
+            // For asks: virtually credit base atoms so the engine can
+            // reserve them for the resting order. Base is virtual.
+            if !place_order_params.is_bid() {
+                dynamic_account.deposit(trader_index, place_order_params.base_atoms(), true)?;
+            }
+
             let add_order_to_market_result: AddOrderToMarketResult = batch_place_order(
                 &mut dynamic_account,
                 AddOrderToMarketArgs {

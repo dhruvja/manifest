@@ -23,8 +23,8 @@ use program::{
     expand_market::process_expand_market, global_add_trader::process_global_add_trader,
     global_clean::process_global_clean, global_create::process_global_create,
     global_deposit::process_global_deposit, global_evict::process_global_evict,
-    global_withdraw::process_global_withdraw, process_swap, withdraw::process_withdraw,
-    ManifestInstruction,
+    global_withdraw::process_global_withdraw, liquidate::process_liquidate, process_swap,
+    withdraw::process_withdraw, ManifestInstruction,
 };
 use solana_program::{
     account_info::AccountInfo, declare_id, entrypoint::ProgramResult, program_error::ProgramError,
@@ -154,6 +154,15 @@ pub fn process_instruction(
         }
         ManifestInstruction::GlobalClean => {
             process_global_clean(program_id, accounts, data)?;
+        }
+        ManifestInstruction::DelegateMarket => {
+            program::delegate_market::process_delegate_market(program_id, accounts, data)?;
+        }
+        ManifestInstruction::CommitMarket => {
+            program::commit_market::process_commit_market(program_id, accounts, data)?;
+        }
+        ManifestInstruction::Liquidate => {
+            process_liquidate(program_id, accounts, data)?;
         }
     }
 

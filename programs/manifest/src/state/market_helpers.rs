@@ -415,7 +415,7 @@ impl<'a, 'b, 'info> AddSingleOrderCtx<'a, 'b, 'info> {
             maker_sequence_number,
             taker_sequence_number: fixed.order_sequence_number,
             taker_is_buy: PodBool::from(is_bid),
-            base_mint: *fixed.get_base_mint(),
+            base_mint: Pubkey::default(),
             quote_mint: *fixed.get_quote_mint(),
             // TODO: Fix this
             is_maker_global: PodBool::from(false),

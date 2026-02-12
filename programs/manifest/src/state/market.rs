@@ -136,21 +136,15 @@ pub struct MarketFixed {
 
     /// Version
     version: u8,
+    /// Index identifying the base asset (e.g., 0=SOL, 1=ETH).
+    /// Used in PDA seeds: [b"market", &[base_mint_index], quote_mint]
+    base_mint_index: u8,
     base_mint_decimals: u8,
     quote_mint_decimals: u8,
-    base_vault_bump: u8,
-    quote_vault_bump: u8,
-    _padding1: [u8; 3],
+    _padding1: [u8; 4],
 
-    /// Base mint
-    base_mint: Pubkey,
-    /// Quote mint
+    /// Quote mint (USDC)
     quote_mint: Pubkey,
-
-    /// Base vault
-    base_vault: Pubkey,
-    /// Quote vault
-    quote_vault: Pubkey,
 
     /// The sequence number of the next order.
     order_sequence_number: u64,
@@ -196,27 +190,38 @@ pub struct MarketFixed {
     /// Quote tokens reserved for non-global orders
     pub orderbook_quote_atoms: QuoteAtoms,
     #[cfg(feature = "certora")]
-    _padding3: [u64; 4],
+    /// Initial margin in basis points (e.g., 1000 = 10% = 10x leverage)
+    initial_margin_bps: u64,
+    #[cfg(feature = "certora")]
+    /// Maintenance margin in basis points (e.g., 500 = 5%)
+    maintenance_margin_bps: u64,
+    #[cfg(feature = "certora")]
+    _padding3: [u64; 14],
 
-    // Unused padding. Saved in case a later version wants to be backwards
-    // compatible. Also, it is nice to have the fixed size be a round number,
-    // 256 bytes.
+    /// Initial margin in basis points (e.g., 1000 = 10% = 10x leverage)
     #[cfg(not(feature = "certora"))]
-    _padding3: [u64; 8],
+    initial_margin_bps: u64,
+    /// Maintenance margin in basis points (e.g., 500 = 5%)
+    #[cfg(not(feature = "certora"))]
+    maintenance_margin_bps: u64,
+    /// Total open long position in base atoms across all traders
+    #[cfg(not(feature = "certora"))]
+    total_long_base_atoms: u64,
+    /// Total open short position in base atoms across all traders
+    #[cfg(not(feature = "certora"))]
+    total_short_base_atoms: u64,
+    #[cfg(not(feature = "certora"))]
+    _padding3: [u64; 16],
 }
 const_assert_eq!(
     size_of::<MarketFixed>(),
     8 +   // discriminant
     1 +   // version
+    1 +   // base_mint_index
     1 +   // base_mint_decimals
     1 +   // quote_mint_decimals
-    1 +   // base_vault_bump
-    1 +   // quote_vault_bump
-    3 +   // padding
-    32 +  // base_mint
+    4 +   // padding1
     32 +  // quote_mint
-    32 +  // base_vault
-    32 +  // quote_vault
     8 +   // order_sequence_number
     4 +   // num_bytes_allocated
     4 +   // bids_root_index
@@ -224,10 +229,10 @@ const_assert_eq!(
     4 +   // asks_root_index
     4 +   // asks_best_index
     4 +   // claimed_seats_root_index
-    4 +   // claimed_seats_best_index
     4 +   // free_list_head_index
-    8 +   // padding2
-    64 // padding4
+    4 +   // padding2
+    8 +   // quote_volume
+    160   // perps + padding
 );
 const_assert_eq!(size_of::<MarketFixed>(), MARKET_FIXED_SIZE);
 const_assert_eq!(size_of::<MarketFixed>() % 8, 0);
@@ -235,24 +240,18 @@ impl Get for MarketFixed {}
 
 impl MarketFixed {
     pub fn new_empty(
-        base_mint: &MintAccountInfo,
+        base_mint_index: u8,
+        base_mint_decimals: u8,
         quote_mint: &MintAccountInfo,
-        market_key: &Pubkey,
     ) -> Self {
-        let (base_vault, base_vault_bump) = get_vault_address(market_key, base_mint.info.key);
-        let (quote_vault, quote_vault_bump) = get_vault_address(market_key, quote_mint.info.key);
         MarketFixed {
             discriminant: MARKET_FIXED_DISCRIMINANT,
             version: 0,
-            base_mint_decimals: base_mint.mint.decimals,
+            base_mint_index,
+            base_mint_decimals,
             quote_mint_decimals: quote_mint.mint.decimals,
-            base_vault_bump,
-            quote_vault_bump,
-            _padding1: [0; 3],
-            base_mint: *base_mint.info.key,
+            _padding1: [0; 4],
             quote_mint: *quote_mint.info.key,
-            base_vault,
-            quote_vault,
             order_sequence_number: 0,
             num_bytes_allocated: 0,
             bids_root_index: NIL,
@@ -268,7 +267,15 @@ impl MarketFixed {
             _padding2: [0; 1],
             quote_volume: QuoteAtoms::ZERO,
             #[cfg(not(feature = "certora"))]
-            _padding3: [0; 8],
+            initial_margin_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            maintenance_margin_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            total_long_base_atoms: 0,
+            #[cfg(not(feature = "certora"))]
+            total_short_base_atoms: 0,
+            #[cfg(not(feature = "certora"))]
+            _padding3: [0; 16],
             #[cfg(feature = "certora")]
             withdrawable_base_atoms: BaseAtoms::new(0),
             #[cfg(feature = "certora")]
@@ -278,7 +285,11 @@ impl MarketFixed {
             #[cfg(feature = "certora")]
             orderbook_quote_atoms: QuoteAtoms::new(0),
             #[cfg(feature = "certora")]
-            _padding3: [0; 4],
+            initial_margin_bps: 0,
+            #[cfg(feature = "certora")]
+            maintenance_margin_bps: 0,
+            #[cfg(feature = "certora")]
+            _padding3: [0; 14],
         }
     }
 
@@ -290,15 +301,11 @@ impl MarketFixed {
         MarketFixed {
             discriminant: MARKET_FIXED_DISCRIMINANT,
             version: 0,
+            base_mint_index: nondet(),
             base_mint_decimals: nondet(),
             quote_mint_decimals: nondet(),
-            base_vault_bump: nondet(),
-            quote_vault_bump: nondet(),
-            _padding1: [0; 3],
-            base_mint: nondet(),
+            _padding1: [0; 4],
             quote_mint: nondet(),
-            base_vault: nondet(),
-            quote_vault: nondet(),
             order_sequence_number: nondet(),
             num_bytes_allocated: nondet(),
             bids_root_index: NIL,
@@ -313,33 +320,23 @@ impl MarketFixed {
             withdrawable_quote_atoms: QuoteAtoms::new(nondet()),
             orderbook_base_atoms: BaseAtoms::new(nondet()),
             orderbook_quote_atoms: QuoteAtoms::new(nondet()),
-            _padding3: [0; 4],
+            initial_margin_bps: 0,
+            maintenance_margin_bps: 0,
+            _padding3: [0; 14],
         }
     }
 
-    pub fn get_base_mint(&self) -> &Pubkey {
-        &self.base_mint
+    pub fn get_base_mint_index(&self) -> u8 {
+        self.base_mint_index
     }
     pub fn get_quote_mint(&self) -> &Pubkey {
         &self.quote_mint
-    }
-    pub fn get_base_vault(&self) -> &Pubkey {
-        &self.base_vault
-    }
-    pub fn get_quote_vault(&self) -> &Pubkey {
-        &self.quote_vault
     }
     pub fn get_base_mint_decimals(&self) -> u8 {
         self.base_mint_decimals
     }
     pub fn get_quote_mint_decimals(&self) -> u8 {
         self.quote_mint_decimals
-    }
-    pub fn get_base_vault_bump(&self) -> u8 {
-        self.base_vault_bump
-    }
-    pub fn get_quote_vault_bump(&self) -> u8 {
-        self.quote_vault_bump
     }
     pub fn get_quote_volume(&self) -> QuoteAtoms {
         self.quote_volume
@@ -379,6 +376,37 @@ impl MarketFixed {
     // Used in benchmark
     pub fn has_free_block(&self) -> bool {
         self.free_list_head_index != NIL
+    }
+
+    pub fn get_initial_margin_bps(&self) -> u64 {
+        self.initial_margin_bps
+    }
+    pub fn get_maintenance_margin_bps(&self) -> u64 {
+        self.maintenance_margin_bps
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn get_total_long_base_atoms(&self) -> u64 {
+        self.total_long_base_atoms
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn get_total_short_base_atoms(&self) -> u64 {
+        self.total_short_base_atoms
+    }
+    pub fn set_perps_params(
+        &mut self,
+        initial_margin_bps: u64,
+        maintenance_margin_bps: u64,
+    ) {
+        self.initial_margin_bps = initial_margin_bps;
+        self.maintenance_margin_bps = maintenance_margin_bps;
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn set_total_long_base_atoms(&mut self, val: u64) {
+        self.total_long_base_atoms = val;
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn set_total_short_base_atoms(&mut self, val: u64) {
+        self.total_short_base_atoms = val;
     }
 }
 
@@ -436,9 +464,9 @@ impl<Fixed: DerefOrBorrow<MarketFixed>, Dynamic: DerefOrBorrow<[u8]>>
         }
     }
 
-    pub fn get_base_mint(&self) -> &Pubkey {
+    pub fn get_base_mint_index(&self) -> u8 {
         let DynamicAccount { fixed, .. } = self.borrow_market();
-        fixed.get_base_mint()
+        fixed.get_base_mint_index()
     }
 
     pub fn get_quote_mint(&self) -> &Pubkey {
@@ -1189,15 +1217,29 @@ impl<
                 },
             )?;
 
-            // record maker & taker volume
-            record_volume_by_trader_index(dynamic, maker_trader_index, quote_atoms_traded);
-            record_volume_by_trader_index(dynamic, trader_index, quote_atoms_traded);
+            // Update perps position tracking for maker and taker
+            update_perps_position(
+                fixed,
+                dynamic,
+                maker_trader_index,
+                base_atoms_traded.as_u64(),
+                quote_atoms_traded.as_u64(),
+                !is_bid,
+            )?;
+            update_perps_position(
+                fixed,
+                dynamic,
+                trader_index,
+                base_atoms_traded.as_u64(),
+                quote_atoms_traded.as_u64(),
+                is_bid,
+            )?;
 
             emit_stack(FillLog {
                 market,
                 maker,
                 taker,
-                base_mint: fixed.base_mint,
+                base_mint: Pubkey::default(),
                 quote_mint: fixed.quote_mint,
                 base_atoms: base_atoms_traded,
                 quote_atoms: quote_atoms_traded,
@@ -1781,6 +1823,107 @@ pub fn update_balance(
     Ok(())
 }
 
+/// Update perps position tracking for a trader after a fill.
+/// `is_bid` means the trader is buying (going long).
+pub fn update_perps_position(
+    fixed: &mut MarketFixed,
+    dynamic: &mut [u8],
+    trader_index: DataIndex,
+    base_atoms_traded: u64,
+    quote_atoms_traded: u64,
+    is_bid: bool,
+) -> ProgramResult {
+    let claimed_seat: &mut ClaimedSeat =
+        get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+
+    let old_position: i64 = claimed_seat.get_position_size();
+    let old_cost_basis: u64 = claimed_seat.get_quote_cost_basis();
+
+    let new_position: i64 = if is_bid {
+        old_position
+            .checked_add(base_atoms_traded as i64)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+    } else {
+        old_position
+            .checked_sub(base_atoms_traded as i64)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+    };
+
+    // Update cost basis
+    let new_cost_basis: u64 = if old_position == 0 {
+        // Opening fresh position
+        quote_atoms_traded
+    } else if (old_position > 0 && is_bid) || (old_position < 0 && !is_bid) {
+        // Increasing position in same direction
+        old_cost_basis.saturating_add(quote_atoms_traded)
+    } else {
+        // Reducing or flipping position
+        let old_abs: u64 = old_position.unsigned_abs();
+        if base_atoms_traded <= old_abs {
+            // Partial close: proportionally reduce cost basis
+            let closed_cost: u64 = ((old_cost_basis as u128)
+                .checked_mul(base_atoms_traded as u128)
+                .unwrap_or(u128::MAX)
+                / (old_abs as u128)) as u64;
+            old_cost_basis.saturating_sub(closed_cost)
+        } else {
+            // Full close + open in opposite direction
+            let remaining: u64 = base_atoms_traded - old_abs;
+            ((quote_atoms_traded as u128)
+                .checked_mul(remaining as u128)
+                .unwrap_or(u128::MAX)
+                / (base_atoms_traded as u128)) as u64
+        }
+    };
+
+    claimed_seat.set_position_size(new_position);
+    claimed_seat.set_quote_cost_basis(new_cost_basis);
+
+    // Update global position tracking
+    #[cfg(not(feature = "certora"))]
+    {
+        let old_long: u64 = if old_position > 0 {
+            old_position as u64
+        } else {
+            0
+        };
+        let old_short: u64 = if old_position < 0 {
+            old_position.unsigned_abs()
+        } else {
+            0
+        };
+        let new_long: u64 = if new_position > 0 {
+            new_position as u64
+        } else {
+            0
+        };
+        let new_short: u64 = if new_position < 0 {
+            new_position.unsigned_abs()
+        } else {
+            0
+        };
+
+        if new_long != old_long {
+            let current: u64 = fixed.get_total_long_base_atoms();
+            if new_long > old_long {
+                fixed.set_total_long_base_atoms(current.saturating_add(new_long - old_long));
+            } else {
+                fixed.set_total_long_base_atoms(current.saturating_sub(old_long - new_long));
+            }
+        }
+        if new_short != old_short {
+            let current: u64 = fixed.get_total_short_base_atoms();
+            if new_short > old_short {
+                fixed.set_total_short_base_atoms(current.saturating_add(new_short - old_short));
+            } else {
+                fixed.set_total_short_base_atoms(current.saturating_sub(old_short - new_short));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn record_volume_by_trader_index(
     dynamic: &mut [u8],
     trader_index: DataIndex,
@@ -1955,6 +2098,6 @@ pub fn create_empty_market(
             executable: false,
         },
     };
-    let market_fixed: MarketFixed = MarketFixed::new_empty(&base_mint, &quote_mint, market_key);
+    let market_fixed: MarketFixed = MarketFixed::new_empty(0, base_mint.mint.decimals, &quote_mint);
     market_fixed
 }

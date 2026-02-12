@@ -162,6 +162,30 @@ pub enum ManifestInstruction {
     #[account(12, writable, optional, name = "global", desc = "Global account")]
     #[account(13, writable, optional, name = "global_vault", desc = "Global vault")]
     SwapV2 = 13,
+
+    /// Delegate market account to MagicBlock ephemeral rollups.
+    #[account(0, writable, signer, name = "payer", desc = "Payer and market creator")]
+    #[account(1, writable, name = "market", desc = "Market PDA to delegate")]
+    #[account(2, name = "owner_program", desc = "Manifest program (owner of the PDA)")]
+    #[account(3, name = "delegation_program", desc = "MagicBlock delegation program")]
+    #[account(4, writable, name = "delegation_record", desc = "Delegation record PDA")]
+    #[account(5, writable, name = "delegation_metadata", desc = "Delegation metadata PDA")]
+    #[account(6, name = "system_program", desc = "System program")]
+    #[account(7, writable, name = "buffer", desc = "Buffer account for delegation")]
+    DelegateMarket = 14,
+
+    /// Commit delegated market state back to mainnet.
+    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    #[account(1, writable, name = "market", desc = "Delegated market account")]
+    #[account(2, name = "magic_program", desc = "MagicBlock magic program")]
+    #[account(3, name = "magic_context", desc = "MagicBlock magic context")]
+    CommitMarket = 15,
+
+    /// Liquidate an underwater perps position.
+    #[account(0, writable, signer, name = "liquidator", desc = "Liquidator")]
+    #[account(1, writable, name = "market", desc = "Perps market account")]
+    #[account(2, name = "system_program", desc = "System program")]
+    Liquidate = 16,
 }
 
 impl ManifestInstruction {
@@ -172,7 +196,7 @@ impl ManifestInstruction {
 
 #[test]
 fn test_instruction_serialization() {
-    let num_instructions: u8 = 13;
+    let num_instructions: u8 = 16;
     for i in 0..=255 {
         let instruction: ManifestInstruction = match ManifestInstruction::try_from(i) {
             Ok(j) => {

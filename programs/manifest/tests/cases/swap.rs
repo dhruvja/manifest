@@ -1497,7 +1497,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     let base_mint_key: Pubkey = base_mint_f.key;
 
     // Create the market with Token-2022 base (7 decimals) and USDC quote (6 decimals)
-    let market_keypair =
+    let market_key =
         create_market_with_mints(Rc::clone(&context), &base_mint_key, &usdc_mint_f.key).await?;
 
     // Create base token account (Token-2022) and mint tokens
@@ -1522,7 +1522,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // plus additional blocks needed for reversed orders created during swaps)
     // Each reverse order that matches creates a new order, so we need 30 for original orders,
     // plus 30 for reversed orders, plus buffer for the remaining resting order
-    expand_market(Rc::clone(&context), &market_keypair.pubkey(), 100).await?;
+    expand_market(Rc::clone(&context), &market_key, 100).await?;
 
     // ============================================================================
     // Transaction 1: ClaimSeat
@@ -1532,7 +1532,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     //   market: CKzJCoCnUVVxhfQGs1aLihpF49tCt49qJaQXofRjRFEL
     //   trader: EHeaNkrqdFvkFz5JprgoRbBD4fLH8YHKbBZ9CJ17hFcR
     // ============================================================================
-    let claim_seat_ix: Instruction = claim_seat_instruction(&market_keypair.pubkey(), payer);
+    let claim_seat_ix: Instruction = claim_seat_instruction(&market_key, payer);
     send_tx_with_retry(
         Rc::clone(&context),
         &[claim_seat_ix],
@@ -1553,7 +1553,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // ============================================================================
     // Deposit log is wrong because of the transfer fee.
     let deposit_base_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         10_000_000_000,
@@ -1580,7 +1580,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     //   amountAtoms: 5456983
     // ============================================================================
     let deposit_usdc_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &usdc_mint_f.key,
         5_456_983,
@@ -1621,7 +1621,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
         PlaceOrderParams::new(571561, 954750000, -10, true, OrderType::Reverse, 200), // seqNum 9, price=95475000000000000
     ];
     let batch1_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1660,7 +1660,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
         PlaceOrderParams::new(568583, 959750000, -10, true, OrderType::Reverse, 200), // seqNum 19, price=95975000000000000
     ];
     let batch2_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1699,7 +1699,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
         PlaceOrderParams::new(565637, 964750000, -10, true, OrderType::Reverse, 200), // seqNum 29, price=96475000000000000
     ];
     let batch3_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1739,7 +1739,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // before this instruction (or switch back to swap instruction).
     // ============================================================================
     let batch7_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1777,7 +1777,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     //   - PlaceOrderLog: baseAtoms=100000, seqNum=54, isBid=true, orderType=0, price=100000000000000000
     // ============================================================================
     let batch8_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1810,7 +1810,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=50000000, price=95425000000000000, seqNum=55, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch9_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1842,7 +1842,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=572160, price=95375000000000000, seqNum=56, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch10_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1874,7 +1874,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=400000000000000000, seqNum=57, isBid=false, orderType=0
     // ============================================================================
     let batch11_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1906,7 +1906,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9386750, price=95425000000000000, seqNum=58, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch12_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1938,7 +1938,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=49899800, price=95375000000000000, seqNum=59, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch13_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -1973,7 +1973,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=95375000000000000, seqNum=62, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch14_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2006,7 +2006,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=95375000000000000, seqNum=63, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch15_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2039,7 +2039,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=30000000, price=95375000000000000, seqNum=65, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch16_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2073,7 +2073,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=50000000, price=95375000000000000, seqNum=66, lastValidSlot=398311171, isBid=false, orderType=0
     // ============================================================================
     let batch17_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2105,7 +2105,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95325000000000000, seqNum=67, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch18_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2139,7 +2139,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=30000000, price=95325000000000000, seqNum=69, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch19_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2172,7 +2172,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=30000000, price=95325000000000000, seqNum=70, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch20_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2205,7 +2205,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=20000000, price=95275000000000000, seqNum=72, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch21_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2237,7 +2237,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95225000000000000, seqNum=73, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch22_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2270,7 +2270,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // ============================================================================
     // Deposit log does not match because of transfer fee
     let deposit_ix23: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         578766770000000,
@@ -2293,7 +2293,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=7770000000, price=95275000000000000, seqNum=74, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch24_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2325,7 +2325,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=95225000000000000, seqNum=75, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch25_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2363,7 +2363,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=52294060, price=95075000000000000, seqNum=81, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch26_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2395,7 +2395,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=50199999, price=95025000000000000, seqNum=82, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch27_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2427,7 +2427,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=7800574870, price=95315631300000000, seqNum=83, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch28_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2459,7 +2459,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=574270, price=95025000000000000, seqNum=84, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch29_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2491,7 +2491,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=15601149740, price=95315631300000000, seqNum=85, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch30_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2525,7 +2525,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=574270, price=95025000000000000, seqNum=88, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch31_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2557,7 +2557,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=15601724010, price=95315631300000000, seqNum=89, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch32_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2589,7 +2589,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=85
     // ============================================================================
     let batch33_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(85)],
@@ -2614,7 +2614,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=74
     // ============================================================================
     let batch35_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(74)],
@@ -2639,7 +2639,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=82
     // ============================================================================
     let batch35_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(82)],
@@ -2665,7 +2665,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=574270, price=95025000000000000, seqNum=90, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch36_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2697,7 +2697,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=574270, price=95025000000000000, seqNum=91, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch37_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2729,7 +2729,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=574270, price=95025000000000000, isBid=true, orderType=5
     // ============================================================================
     let batch38_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2761,7 +2761,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=30, 57
     // ============================================================================
     let batch39_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(30), CancelOrderParams::new(57)],
@@ -2786,7 +2786,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=92, 91, 90, 84, 31-46
     // ============================================================================
     let batch40_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -2832,7 +2832,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=47-51, 60, 68, 71, 58, 55, 76, 66, 64, 78, 70, 89, 83, 79, 72, 80
     // ============================================================================
     let batch41_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -2879,7 +2879,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=77
     // ============================================================================
     let batch42_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(86), CancelOrderParams::new(77)],
@@ -2904,7 +2904,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=81
     // ============================================================================
     let batch43_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(81)],
@@ -2929,7 +2929,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95356400000000000, seqNum=93, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch44_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2962,7 +2962,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95356400000000000, seqNum=94, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch45_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -2994,7 +2994,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95360300000000000, seqNum=95, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch46_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3026,7 +3026,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=40000000, price=95340300000000000, seqNum=96, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch47_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3058,7 +3058,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=96
     // ============================================================================
     let batch48_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(96)],
@@ -3083,7 +3083,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=95
     // ============================================================================
     let batch49_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(95)],
@@ -3108,7 +3108,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9900000, price=95356400000000000, seqNum=97, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch50_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3141,7 +3141,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9900000, price=95356400000000000, seqNum=99, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch51_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3173,7 +3173,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9900000, price=95356400000000000, seqNum=100, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch52_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3207,7 +3207,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9900000, price=95356400000000000, seqNum=102, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch53_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3240,7 +3240,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9900000, price=95356400000000000, seqNum=103, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch54_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3272,7 +3272,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=19799990, price=95356400000000000, seqNum=104, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch55_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3305,7 +3305,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=104
     // ============================================================================
     let batch56_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(100), CancelOrderParams::new(104)],
@@ -3330,7 +3330,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=100000000000000000, seqNum=105, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch57_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3363,7 +3363,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=199990000000000000, seqNum=107, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch58_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3396,7 +3396,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=10000000, price=100000000000000000, seqNum=109, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch59_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3432,7 +3432,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=1962284, price=104500000000000000, seqNum=114, lastValidSlot=200, isBid=false, orderType=4
     // ============================================================================
     let batch60_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3465,7 +3465,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=12038460, price=100500000000000000, seqNum=117, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch61_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3497,7 +3497,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=4018480, price=100500000000000000, seqNum=118, lastValidSlot=0, isBid=true, orderType=5
     // ============================================================================
     let batch62_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3529,7 +3529,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=16061020, price=101500000000000000, seqNum=119, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch63_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3562,7 +3562,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=2018850, price=101500000000000000, seqNum=121, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch64_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3597,7 +3597,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=18060650, price=102500000000000000, seqNum=124, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch65_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3632,7 +3632,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=20087540, price=100500000000000000, seqNum=128, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch66_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3668,7 +3668,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=6061029, price=100299000000000000, seqNum=131, lastValidSlot=0, isBid=false, orderType=1
     // ============================================================================
     let batch67_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3704,7 +3704,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=22122040, price=101500000000000000, seqNum=136, lastValidSlot=0, isBid=true, orderType=1
     // ============================================================================
     let batch68_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3740,7 +3740,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=7969590, price=104500000000000000, seqNum=140, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch69_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3779,7 +3779,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=28065030, price=100500000000000000, seqNum=147, lastValidSlot=0, isBid=false, orderType=0
     // ============================================================================
     let batch70_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3817,7 +3817,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=26098819, price=103500000000000000, seqNum=153, lastValidSlot=0, isBid=true, orderType=0
     // ============================================================================
     let batch71_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3849,7 +3849,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=153, 152, 151, 149, 150, 148, 133, 141
     // ============================================================================
     let batch72_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -3883,7 +3883,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=115
     // ============================================================================
     let batch73_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![CancelOrderParams::new(115)],
@@ -3917,7 +3917,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9811422, price=104500000000000000, seqNum=163, lastValidSlot=200, isBid=false, orderType=4
     // ============================================================================
     let batch74_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3953,7 +3953,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=30284700, price=102500000000000000, seqNum=164, lastValidSlot=0, isBid=false, orderType=5
     // ============================================================================
     let batch75_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -3985,7 +3985,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=158, 157, 159, 160, 161, 164, 162, 163
     // ============================================================================
     let batch76_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -4019,7 +4019,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=156, 155, 154
     // ============================================================================
     let batch77_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -4057,7 +4057,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9811422, price=104500000000000000, seqNum=174, lastValidSlot=200, isBid=false, orderType=4
     // ============================================================================
     let batch78_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -4093,7 +4093,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // CancelOrderLog: seqNum=165, 166, 167, 168, 169, 174, 173, 172, 171, 170
     // ============================================================================
     let batch79_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![
@@ -4144,7 +4144,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // PlaceOrderLog: baseAtoms=9811422, price=104500000000000000, seqNum=184, lastValidSlot=200, isBid=false, orderType=4
     // ============================================================================
     let batch81_ix = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         None,
         vec![],
@@ -4176,7 +4176,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // This always succeeds even before the fix. Just here for logging and debugging.
     crate::verify_vault_balance(
         Rc::clone(&context),
-        &market_keypair.pubkey(),
+        &market_key,
         &[*payer],
         true,
     )
@@ -4190,7 +4190,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // SwapParams: inAtoms=200000, outAtoms=0, isBaseIn=true, isExactIn=true
     // ============================================================================
     let swap82_ix = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         &usdc_mint_f.key,
@@ -4220,7 +4220,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // SwapParams: inAtoms=300000, outAtoms=1, isBaseIn=true, isExactIn=true
     // ============================================================================
     let swap83_ix = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         &usdc_mint_f.key,
@@ -4244,7 +4244,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
 
     crate::verify_vault_balance(
         Rc::clone(&context),
-        &market_keypair.pubkey(),
+        &market_key,
         &[*payer],
         true,
     )
@@ -4254,7 +4254,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // New TX for test coverage of !isExactIn
     // ============================================================================
     let swap84_ix = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         &usdc_mint_f.key,
@@ -4280,7 +4280,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
     // New TX for test coverage of !isExactIn
     // ============================================================================
     let swap85_ix = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         payer,
         &base_mint_key,
         &usdc_mint_f.key,
@@ -4304,7 +4304,7 @@ async fn ljitsps_test() -> anyhow::Result<()> {
 
     crate::verify_vault_balance(
         Rc::clone(&context),
-        &market_keypair.pubkey(),
+        &market_key,
         &[*payer],
         false,
     )

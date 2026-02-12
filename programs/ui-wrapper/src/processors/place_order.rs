@@ -274,11 +274,12 @@ pub(crate) fn process_place_order(
             .saturating_sub(remaining_quote_atoms)
             .as_u64()
     } else {
+        // Perps: asks are backed by quote margin, not base tokens.
         // Core CPI verifies token account / vault consistency with mint.
         require!(
-            mint.key.eq(market.get_fixed()?.get_base_mint()),
+            mint.key.eq(market.get_fixed()?.get_quote_mint()),
             InvalidDepositAccounts,
-            "expected market.base_mint as deposit mint"
+            "expected market.quote_mint as deposit mint for perps ask"
         )?;
         base_atoms.saturating_sub(remaining_base_atoms).as_u64()
     };

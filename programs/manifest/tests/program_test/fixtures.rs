@@ -19,7 +19,7 @@ use manifest::{
     },
     quantities::WrapperU64,
     state::{GlobalFixed, GlobalValue, MarketFixed, MarketValue, OrderType, RestingOrder},
-    validation::{get_global_address, get_vault_address, MintAccountInfo},
+    validation::{get_global_address, get_market_address, get_vault_address, MintAccountInfo},
 };
 use solana_program::{hash::Hash, pubkey::Pubkey, rent::Rent};
 use solana_program_test::{processor, BanksClientError, ProgramTest, ProgramTestContext};
@@ -264,22 +264,21 @@ impl TestFixture {
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
     ) -> anyhow::Result<Pubkey, BanksClientError> {
-        let market_keypair: Keypair = Keypair::new();
+        let (market_key, _) = get_market_address(base_mint, quote_mint);
         let payer: Pubkey = self.context.borrow().payer.pubkey();
         let payer_keypair: Keypair = self.context.borrow().payer.insecure_clone();
 
         let create_market_ixs: Vec<Instruction> =
-            create_market_instructions(&market_keypair.pubkey(), base_mint, quote_mint, &payer)
-                .unwrap();
+            create_market_instructions(base_mint, quote_mint, &payer);
 
         send_tx_with_retry(
             Rc::clone(&self.context),
             &create_market_ixs[..],
             Some(&payer),
-            &[&payer_keypair, &market_keypair],
+            &[&payer_keypair],
         )
         .await?;
-        Ok(market_keypair.pubkey())
+        Ok(market_key)
     }
 
     pub async fn claim_seat(&self) -> anyhow::Result<(), BanksClientError> {
@@ -809,18 +808,17 @@ impl MarketFixture {
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
     ) -> Self {
-        let market_keypair: Keypair = Keypair::new();
+        let (market_key, _) = get_market_address(base_mint, quote_mint);
         let payer: Pubkey = context.borrow().payer.pubkey();
         let payer_keypair: Keypair = context.borrow().payer.insecure_clone();
         let create_market_ixs: Vec<Instruction> =
-            create_market_instructions(&market_keypair.pubkey(), base_mint, quote_mint, &payer)
-                .unwrap();
+            create_market_instructions(base_mint, quote_mint, &payer);
 
         send_tx_with_retry(
             Rc::clone(&context),
             &create_market_ixs[..],
             Some(&payer),
-            &[&payer_keypair, &market_keypair],
+            &[&payer_keypair],
         )
         .await
         .unwrap();
@@ -871,9 +869,9 @@ impl MarketFixture {
         // Dummy default value. Not valid until reload.
         MarketFixture {
             context: context_ref,
-            key: market_keypair.pubkey(),
+            key: market_key,
             market: MarketValue {
-                fixed: MarketFixed::new_empty(&base_mint, &quote_mint, &market_keypair.pubkey()),
+                fixed: MarketFixed::new_empty(&base_mint, &quote_mint, &market_key),
                 dynamic: Vec::new(),
             },
         }
@@ -1764,29 +1762,28 @@ pub async fn verify_vault_balance(
 }
 
 /// Create a market with the given base and quote mints.
-/// Returns the market keypair.
+/// Returns the market PDA pubkey.
 pub async fn create_market_with_mints(
     context: Rc<RefCell<ProgramTestContext>>,
     base_mint: &Pubkey,
     quote_mint: &Pubkey,
-) -> Result<Keypair, BanksClientError> {
-    let market_keypair = Keypair::new();
+) -> Result<Pubkey, BanksClientError> {
+    let (market_key, _) = get_market_address(base_mint, quote_mint);
     let payer_keypair = context.borrow().payer.insecure_clone();
     let payer = payer_keypair.pubkey();
 
     let create_market_ixs: Vec<Instruction> =
-        create_market_instructions(&market_keypair.pubkey(), base_mint, quote_mint, &payer)
-            .unwrap();
+        create_market_instructions(base_mint, quote_mint, &payer);
 
     send_tx_with_retry(
         Rc::clone(&context),
         &create_market_ixs[..],
         Some(&payer),
-        &[&payer_keypair, &market_keypair],
+        &[&payer_keypair],
     )
     .await?;
 
-    Ok(market_keypair)
+    Ok(market_key)
 }
 
 /// Create a Token-2022 token account for a mint with transfer fee extension.

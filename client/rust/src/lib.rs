@@ -55,14 +55,21 @@ pub struct ManifestMarket {
 }
 
 impl ManifestMarket {
+    pub fn get_base_mint_index(&self) -> u8 {
+        self.market.get_base_mint_index()
+    }
+    /// Returns Pubkey::default() since base is virtual in perps (no actual base mint).
+    /// Kept for interface compatibility.
     pub fn get_base_mint(&self) -> Pubkey {
-        *self.market.get_base_mint()
+        Pubkey::default()
     }
     pub fn get_quote_mint(&self) -> Pubkey {
         *self.market.get_quote_mint()
     }
+    /// Returns global address for the default base mint (Pubkey::default()).
+    /// Base is virtual in perps, so this is a placeholder.
     pub fn get_base_global_address(&self) -> Pubkey {
-        get_global_address(self.market.get_base_mint()).0
+        get_global_address(&self.get_base_mint()).0
     }
     pub fn get_quote_global_address(&self) -> Pubkey {
         get_global_address(self.market.get_quote_mint()).0

@@ -124,14 +124,12 @@ impl Dex for Manifest {
             .get_account_data(&Pubkey::from_str(pool_address).ok()?)
             .ok()?;
         let market: MarketValue = manifest::program::get_dynamic_value(market_data.as_slice());
-        let base_vault: &Pubkey = market.fixed.get_base_vault();
-        let quote_vault: &Pubkey = market.fixed.get_quote_vault();
+        // Perps: only quote vault exists, derive it
+        let quote_mint: &Pubkey = market.fixed.get_quote_mint();
+        let (quote_vault, _) = manifest::validation::get_vault_address(&Pubkey::from_str(pool_address).ok()?, quote_mint);
 
-        let base_reserve: Option<f64> = match client.get_token_account_balance(base_vault) {
-            Ok(resp) => Some(resp.ui_amount.unwrap_or(0.0)),
-            Err(_) => None,
-        };
-        let quote_reserve: Option<f64> = match client.get_token_account_balance(quote_vault) {
+        let base_reserve: Option<f64> = None; // Base is virtual in perps
+        let quote_reserve: Option<f64> = match client.get_token_account_balance(&quote_vault) {
             Ok(resp) => Some(resp.ui_amount.unwrap_or(0.0)),
             Err(_) => None,
         };
@@ -187,7 +185,7 @@ impl Dex for Manifest {
 
         Some(PoolMetadata {
             pool_address: pool_address.to_string(),
-            base_mint: market.get_base_mint().to_string(),
+            base_mint: Pubkey::default().to_string(),
             quote_mint: market.get_quote_mint().to_string(),
             base_reserve,
             quote_reserve,

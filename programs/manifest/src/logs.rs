@@ -181,6 +181,21 @@ pub struct GlobalCleanupLog {
     pub amount_deposited: GlobalAtoms,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable, Pod, ShankAccount)]
+pub struct LiquidateLog {
+    pub market: Pubkey,
+    pub liquidator: Pubkey,
+    pub trader: Pubkey,
+    /// Position size as i64 (positive = long, negative = short)
+    pub position_size: u64,
+    /// Mark price used for settlement
+    pub settlement_price: u64,
+    /// PnL as i64 (positive = profit, negative = loss)
+    pub pnl: u64,
+    pub _padding: [u8; 8],
+}
+
 pub trait Discriminant {
     fn discriminant() -> [u8; 8];
 }
@@ -218,6 +233,7 @@ const GLOBAL_DEPOSIT_LOG_DISCRIMINANT: [u8; 8] = [16, 26, 72, 1, 145, 232, 182, 
 const GLOBAL_WITHDRAW_LOG_DISCRIMINANT: [u8; 8] = [206, 118, 67, 64, 124, 109, 157, 201];
 const GLOBAL_EVICT_LOG_DISCRIMINANT: [u8; 8] = [250, 180, 155, 38, 98, 223, 82, 223];
 const GLOBAL_CLEANUP_LOG_DISCRIMINANT: [u8; 8] = [193, 249, 115, 186, 42, 126, 196, 82];
+const LIQUIDATE_LOG_DISCRIMINANT: [u8; 8] = [0; 8]; // placeholder, will be verified by test
 
 discriminant!(
     CreateMarketLog,
@@ -281,4 +297,9 @@ discriminant!(
     GlobalCleanupLog,
     GLOBAL_CLEANUP_LOG_DISCRIMINANT,
     test_global_cleanup_log
+);
+discriminant!(
+    LiquidateLog,
+    LIQUIDATE_LOG_DISCRIMINANT,
+    test_liquidate_log
 );

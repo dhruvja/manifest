@@ -8,7 +8,7 @@ use manifest::{
     program::{create_global_instruction, create_market_instructions, get_dynamic_value},
     quantities::WrapperU64,
     state::{GlobalFixed, GlobalValue, MarketFixed, MarketValue},
-    validation::{get_global_address, MintAccountInfo},
+    validation::{get_global_address, get_market_address, MintAccountInfo},
 };
 use solana_program::{hash::Hash, pubkey::Pubkey, rent::Rent};
 use solana_program_test::{processor, BanksClientError, ProgramTest, ProgramTestContext};
@@ -87,7 +87,6 @@ impl TestFixture {
             solana_sdk::account::Account::new(SOL_UNIT_SIZE, 0, &solana_sdk::system_program::id()),
         );
 
-        let market_keypair: Keypair = Keypair::new();
         let wrapper_keypair: Keypair = Keypair::new();
 
         let context: Rc<RefCell<ProgramTestContext>> =
@@ -99,26 +98,22 @@ impl TestFixture {
 
         let payer_pubkey: Pubkey = context.borrow().payer.pubkey();
         let payer: Keypair = context.borrow().payer.insecure_clone();
-        let create_market_ixs: Vec<Instruction> = create_market_instructions(
-            &market_keypair.pubkey(),
-            &sol_mint_f.key,
-            &usdc_mint_f.key,
-            &payer_pubkey,
-        )
-        .unwrap();
+        let (market_key, _) = get_market_address(&sol_mint_f.key, &usdc_mint_f.key);
+        let create_market_ixs: Vec<Instruction> =
+            create_market_instructions(&sol_mint_f.key, &usdc_mint_f.key, &payer_pubkey);
 
         send_tx_with_retry(
             Rc::clone(&context),
             &create_market_ixs[..],
             Some(&payer_pubkey),
-            &[&payer.insecure_clone(), &market_keypair],
+            &[&payer.insecure_clone()],
         )
         .await
         .unwrap();
 
         // Now that market is created, we can make a market fixture.
         let market_fixture: MarketFixture =
-            MarketFixture::new(Rc::clone(&context), market_keypair.pubkey()).await;
+            MarketFixture::new(Rc::clone(&context), market_key).await;
 
         let create_wrapper_ixs: Vec<Instruction> =
             create_wrapper_instructions(&payer_pubkey, &payer_pubkey, &wrapper_keypair.pubkey())
@@ -179,7 +174,6 @@ impl TestFixture {
             solana_sdk::account::Account::new(SOL_UNIT_SIZE, 0, &solana_sdk::system_program::id()),
         );
 
-        let market_keypair: Keypair = Keypair::new();
         let wrapper_keypair: Keypair = Keypair::new();
 
         let context: Rc<RefCell<ProgramTestContext>> =
@@ -198,26 +192,22 @@ impl TestFixture {
 
         let payer_pubkey: Pubkey = context.borrow().payer.pubkey();
         let payer: Keypair = context.borrow().payer.insecure_clone();
-        let create_market_ixs: Vec<Instruction> = create_market_instructions(
-            &market_keypair.pubkey(),
-            &sol_mint_f.key,
-            &usdc_mint_f.key,
-            &payer_pubkey,
-        )
-        .unwrap();
+        let (market_key, _) = get_market_address(&sol_mint_f.key, &usdc_mint_f.key);
+        let create_market_ixs: Vec<Instruction> =
+            create_market_instructions(&sol_mint_f.key, &usdc_mint_f.key, &payer_pubkey);
 
         send_tx_with_retry(
             Rc::clone(&context),
             &create_market_ixs[..],
             Some(&payer_pubkey),
-            &[&payer.insecure_clone(), &market_keypair],
+            &[&payer.insecure_clone()],
         )
         .await
         .unwrap();
 
         // Now that market is created, we can make a market fixture.
         let market_fixture: MarketFixture =
-            MarketFixture::new(Rc::clone(&context), market_keypair.pubkey()).await;
+            MarketFixture::new(Rc::clone(&context), market_key).await;
 
         let create_wrapper_ixs: Vec<Instruction> =
             create_wrapper_instructions(&payer_pubkey, &payer_pubkey, &wrapper_keypair.pubkey())

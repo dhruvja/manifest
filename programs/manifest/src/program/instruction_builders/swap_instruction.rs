@@ -26,14 +26,54 @@ pub fn swap_instruction(
 ) -> Instruction {
     let (vault_base_account, _) = get_vault_address(market, base_mint);
     let (vault_quote_account, _) = get_vault_address(market, quote_mint);
+    swap_instruction_with_vaults(
+        market,
+        payer,
+        base_mint,
+        quote_mint,
+        trader_base_account,
+        trader_quote_account,
+        &vault_base_account,
+        &vault_quote_account,
+        in_atoms,
+        out_atoms,
+        is_base_in,
+        is_exact_in,
+        token_program_base,
+        token_program_quote,
+        include_global,
+    )
+}
+
+/// Swap instruction with explicit vault addresses.
+/// Use this for ephemeral mode where vaults are EphemeralAtas
+/// at different addresses than the SPL vault PDAs.
+#[allow(clippy::too_many_arguments)]
+pub fn swap_instruction_with_vaults(
+    market: &Pubkey,
+    payer: &Pubkey,
+    base_mint: &Pubkey,
+    quote_mint: &Pubkey,
+    trader_base_account: &Pubkey,
+    trader_quote_account: &Pubkey,
+    vault_base_account: &Pubkey,
+    vault_quote_account: &Pubkey,
+    in_atoms: u64,
+    out_atoms: u64,
+    is_base_in: bool,
+    is_exact_in: bool,
+    token_program_base: Pubkey,
+    token_program_quote: Pubkey,
+    include_global: bool,
+) -> Instruction {
     let mut account_metas: Vec<AccountMeta> = vec![
         AccountMeta::new_readonly(*payer, true),
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(solana_program::system_program::id(), false),
         AccountMeta::new(*trader_base_account, false),
         AccountMeta::new(*trader_quote_account, false),
-        AccountMeta::new(vault_base_account, false),
-        AccountMeta::new(vault_quote_account, false),
+        AccountMeta::new(*vault_base_account, false),
+        AccountMeta::new(*vault_quote_account, false),
         AccountMeta::new_readonly(token_program_base, false),
     ];
     if token_program_base == spl_token_2022::id() {

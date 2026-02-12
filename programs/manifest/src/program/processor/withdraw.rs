@@ -5,7 +5,10 @@ use crate::{
     logs::{emit_stack, WithdrawLog},
     program::get_mut_dynamic_account,
     state::MarketRefMut,
-    validation::{loaders::WithdrawContext, MintAccountInfo, TokenAccountInfo, TokenProgram},
+    validation::{
+        loaders::WithdrawContext,
+        TokenAccountInfo, TokenProgram,
+    },
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use hypertree::DataIndex;
@@ -17,7 +20,7 @@ use {crate::market_vault_seeds_with_bump, solana_program::program::invoke_signed
 #[cfg(feature = "certora")]
 use {
     early_panic::early_panic,
-    solana_cvt::token::{spl_token_2022_transfer, spl_token_transfer},
+    solana_cvt::token::spl_token_transfer,
 };
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -62,68 +65,88 @@ pub(crate) fn process_withdraw_core(
         trader_token,
         vault,
         token_program,
-        mint,
+        mint: _,
     } = withdraw_context;
 
     let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
     let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
 
-    // Validation verifies that the mint is either base or quote.
-    let is_base: bool =
-        &trader_token.try_borrow_data()?[0..32] == dynamic_account.get_base_mint().as_ref();
+    // Perps: only quote (USDC) withdrawals allowed — base is virtual.
+    // The loader already validates that the trader_token is for the quote mint.
 
-    let mint_key: &Pubkey = if is_base {
-        dynamic_account.get_base_mint()
-    } else {
-        dynamic_account.get_quote_mint()
-    };
+    let mint_key: &Pubkey = dynamic_account.get_quote_mint();
 
-    let bump: u8 = if is_base {
-        dynamic_account.fixed.get_base_vault_bump()
-    } else {
-        dynamic_account.fixed.get_quote_vault_bump()
-    };
+    // Derive vault bump on-the-fly for PDA signing
+    let (_, bump) = crate::validation::get_vault_address(market.key, mint_key);
 
-    if *vault.owner == spl_token_2022::id() {
-        spl_token_2022_transfer_from_vault_to_trader_fixed(
-            &token_program,
-            Some(mint),
-            mint_key,
-            &vault,
-            &trader_token,
-            amount_atoms,
-            if is_base {
-                dynamic_account.fixed.get_base_mint_decimals()
-            } else {
-                dynamic_account.fixed.get_quote_mint_decimals()
-            },
-            market.key,
-            bump,
-        )?;
-    } else {
-        spl_token_transfer_from_vault_to_trader(
-            &token_program,
-            &vault,
-            &trader_token,
-            amount_atoms,
-            market.key,
-            bump,
-            mint_key,
-        )?;
-    }
+    // CPI to token program (ephemeral-spl-token on ER)
+    spl_token_transfer_from_vault_to_trader(
+        &token_program,
+        &vault,
+        &trader_token,
+        amount_atoms,
+        market.key,
+        bump,
+        mint_key,
+    )?;
 
     let trader_index: DataIndex =
         get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
-    dynamic_account.withdraw(trader_index, amount_atoms, is_base)?;
+    // is_base = false: always withdrawing quote in perps
+    dynamic_account.withdraw(trader_index, amount_atoms, false)?;
+
+    // Verify remaining margin covers maintenance requirement
+    {
+        use crate::quantities::{BaseAtoms, WrapperU64};
+        use crate::state::claimed_seat::ClaimedSeat;
+        use hypertree::{get_helper, RBNode};
+
+        let claimed_seat: &ClaimedSeat = get_helper::<RBNode<ClaimedSeat>>(
+            &dynamic_account.dynamic,
+            trader_index,
+        )
+        .get_value();
+
+        let position_size: i64 = claimed_seat.get_position_size();
+        if position_size != 0 {
+            let abs_position: u64 = position_size.unsigned_abs();
+            let mark_price =
+                super::liquidate::compute_mark_price(&dynamic_account)?;
+            let current_value: u64 = mark_price
+                .checked_quote_for_base(BaseAtoms::new(abs_position), false)?
+                .as_u64();
+
+            let quote_cost_basis: u64 = claimed_seat.get_quote_cost_basis();
+            let unrealized_pnl: i64 = if position_size > 0 {
+                (current_value as i64).wrapping_sub(quote_cost_basis as i64)
+            } else {
+                (quote_cost_basis as i64).wrapping_sub(current_value as i64)
+            };
+
+            let remaining_margin: u64 = claimed_seat.quote_withdrawable_balance.as_u64();
+            let equity: i128 = (remaining_margin as i128) + (unrealized_pnl as i128);
+
+            let maintenance_margin_bps: u64 =
+                dynamic_account.fixed.get_maintenance_margin_bps();
+            let required_maintenance: u64 = current_value
+                .checked_mul(maintenance_margin_bps)
+                .unwrap_or(u64::MAX)
+                / 10000;
+
+            crate::require!(
+                equity >= required_maintenance as i128,
+                crate::program::ManifestError::InsufficientMargin,
+                "Withdrawal would bring equity {} below maintenance margin {}",
+                equity,
+                required_maintenance,
+            )?;
+        }
+    }
 
     emit_stack(WithdrawLog {
         market: *market.key,
         trader: *payer.key,
-        mint: if is_base {
-            *dynamic_account.get_base_mint()
-        } else {
-            *dynamic_account.get_quote_mint()
-        },
+        mint: *dynamic_account.get_quote_mint(),
         amount_atoms,
     })?;
 
@@ -173,53 +196,3 @@ fn spl_token_transfer_from_vault_to_trader<'a, 'info>(
     spl_token_transfer(vault.info, trader_account.info, vault.info, amount)
 }
 
-/** Transfer from base (quote) vault to base (quote) trader using SPL Token 2022 **/
-#[cfg(not(feature = "certora"))]
-fn spl_token_2022_transfer_from_vault_to_trader_fixed<'a, 'info>(
-    token_program: &TokenProgram<'a, 'info>,
-    mint: Option<MintAccountInfo<'a, 'info>>,
-    mint_key: &Pubkey,
-    vault: &TokenAccountInfo<'a, 'info>,
-    trader_token: &TokenAccountInfo<'a, 'info>,
-    amount_atoms: u64,
-    decimals: u8,
-    market_key: &Pubkey,
-    bump: u8,
-) -> ProgramResult {
-    invoke_signed(
-        &spl_token_2022::instruction::transfer_checked(
-            token_program.key,
-            vault.key,
-            mint_key,
-            trader_token.key,
-            vault.key,
-            &[],
-            amount_atoms,
-            decimals,
-        )?,
-        &[
-            token_program.as_ref().clone(),
-            vault.as_ref().clone(),
-            mint.unwrap().as_ref().clone(),
-            trader_token.as_ref().clone(),
-        ],
-        market_vault_seeds_with_bump!(market_key, mint_key, bump),
-    )
-}
-
-// TODO: Share these with swap and deposit.
-#[cfg(feature = "certora")]
-/** (Summary) Transfer from base (quote) vault to base (quote) trader using SPL Token 2022 **/
-fn spl_token_2022_transfer_from_vault_to_trader_fixed<'a, 'info>(
-    _token_program: &TokenProgram<'a, 'info>,
-    _mint: Option<MintAccountInfo<'a, 'info>>,
-    _mint_key: &Pubkey,
-    vault: &TokenAccountInfo<'a, 'info>,
-    trader_token: &TokenAccountInfo<'a, 'info>,
-    amount_atoms: u64,
-    _decimals: u8,
-    _market_key: &Pubkey,
-    _bump: u8,
-) -> ProgramResult {
-    spl_token_2022_transfer(vault.info, trader_token.info, vault.info, amount_atoms)
-}
