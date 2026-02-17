@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type GlobalEvictParams = {
-  amountAtoms: beet.bignum;
-};
+  amountAtoms: beet.bignum
+}
 
 /**
  * @category userTypes
@@ -16,5 +16,5 @@ export type GlobalEvictParams = {
  */
 export const globalEvictParamsBeet = new beet.BeetArgsStruct<GlobalEvictParams>(
   [['amountAtoms', beet.u64]],
-  'GlobalEvictParams',
-);
+  'GlobalEvictParams'
+)

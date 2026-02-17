@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
 
 /**
  * Arguments used to create {@link CreateMarketLog}
@@ -15,11 +15,11 @@ import * as beet from '@metaplex-foundation/beet';
  * @category generated
  */
 export type CreateMarketLogArgs = {
-  market: web3.PublicKey;
-  creator: web3.PublicKey;
-  baseMint: web3.PublicKey;
-  quoteMint: web3.PublicKey;
-};
+  market: web3.PublicKey
+  creator: web3.PublicKey
+  baseMint: web3.PublicKey
+  quoteMint: web3.PublicKey
+}
 /**
  * Holds the data for the {@link CreateMarketLog} Account and provides de/serialization
  * functionality for that data
@@ -32,7 +32,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
     readonly market: web3.PublicKey,
     readonly creator: web3.PublicKey,
     readonly baseMint: web3.PublicKey,
-    readonly quoteMint: web3.PublicKey,
+    readonly quoteMint: web3.PublicKey
   ) {}
 
   /**
@@ -43,8 +43,8 @@ export class CreateMarketLog implements CreateMarketLogArgs {
       args.market,
       args.creator,
       args.baseMint,
-      args.quoteMint,
-    );
+      args.quoteMint
+    )
   }
 
   /**
@@ -53,9 +53,9 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [CreateMarketLog, number] {
-    return CreateMarketLog.deserialize(accountInfo.data, offset);
+    return CreateMarketLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -67,16 +67,16 @@ export class CreateMarketLog implements CreateMarketLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<CreateMarketLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find CreateMarketLog account at ${address}`);
+      throw new Error(`Unable to find CreateMarketLog account at ${address}`)
     }
-    return CreateMarketLog.fromAccountInfo(accountInfo, 0)[0];
+    return CreateMarketLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -87,10 +87,10 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, createMarketLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, createMarketLogBeet)
   }
 
   /**
@@ -98,7 +98,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [CreateMarketLog, number] {
-    return createMarketLogBeet.deserialize(buf, offset);
+    return createMarketLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -106,7 +106,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return createMarketLogBeet.serialize(this);
+    return createMarketLogBeet.serialize(this)
   }
 
   /**
@@ -114,7 +114,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    * {@link CreateMarketLog}
    */
   static get byteSize() {
-    return createMarketLogBeet.byteSize;
+    return createMarketLogBeet.byteSize
   }
 
   /**
@@ -125,12 +125,12 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       CreateMarketLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -138,7 +138,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
    * hold {@link CreateMarketLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === CreateMarketLog.byteSize;
+    return buf.byteLength - offset === CreateMarketLog.byteSize
   }
 
   /**
@@ -151,7 +151,7 @@ export class CreateMarketLog implements CreateMarketLogArgs {
       creator: this.creator.toBase58(),
       baseMint: this.baseMint.toBase58(),
       quoteMint: this.quoteMint.toBase58(),
-    };
+    }
   }
 }
 
@@ -170,5 +170,5 @@ export const createMarketLogBeet = new beet.BeetStruct<
     ['quoteMint', beetSolana.publicKey],
   ],
   CreateMarketLog.fromArgs,
-  'CreateMarketLog',
-);
+  'CreateMarketLog'
+)

@@ -5,16 +5,16 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 export type ClaimedSeat = {
-  trader: web3.PublicKey;
-  baseWithdrawableBalance: beet.bignum;
-  quoteWithdrawableBalance: beet.bignum;
-  quoteVolume: beet.bignum;
-  padding: number[] /* size: 8 */;
-};
+  trader: web3.PublicKey
+  baseWithdrawableBalance: beet.bignum
+  quoteWithdrawableBalance: beet.bignum
+  quoteVolume: beet.bignum
+  padding: number[] /* size: 8 */
+}
 
 /**
  * @category userTypes
@@ -28,5 +28,5 @@ export const claimedSeatBeet = new beet.BeetArgsStruct<ClaimedSeat>(
     ['quoteVolume', beet.u64],
     ['padding', beet.uniformFixedSizeArray(beet.u8, 8)],
   ],
-  'ClaimedSeat',
-);
+  'ClaimedSeat'
+)

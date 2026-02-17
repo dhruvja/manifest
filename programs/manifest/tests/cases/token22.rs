@@ -7,6 +7,7 @@ use manifest::{
     },
     quantities::WrapperU64,
     state::{OrderType, NO_EXPIRATION_LAST_VALID_SLOT},
+    validation::get_market_address,
 };
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
 use solana_sdk::{
@@ -29,8 +30,6 @@ async fn token22_base() -> anyhow::Result<()> {
 
     solana_logger::setup_with_default(RUST_LOG_DEFAULT);
 
-    let market_keypair: Keypair = Keypair::new();
-
     let context: Rc<RefCell<ProgramTestContext>> =
         Rc::new(RefCell::new(program_test.start_with_context().await));
 
@@ -50,23 +49,19 @@ async fn token22_base() -> anyhow::Result<()> {
     let spl_mint_key: Pubkey = spl_mint_f.key;
 
     // Create the market with SPL as base which is 2022, USDC as quote which is normal.
-    let create_market_ixs: Vec<Instruction> = create_market_instructions(
-        &market_keypair.pubkey(),
-        &spl_mint_f.key,
-        &usdc_mint_f.key,
-        payer,
-    )
-    .unwrap();
+    let (market_key, _) = get_market_address(0, &usdc_mint_f.key);
+    let create_market_ixs: Vec<Instruction> =
+        create_market_instructions(0, 9, &usdc_mint_f.key, payer, 1000, 500, Pubkey::default(), 0, 200);
     send_tx_with_retry(
         Rc::clone(&context),
         &create_market_ixs[..],
         Some(&payer),
-        &[&payer_keypair.insecure_clone(), &market_keypair],
+        &[&payer_keypair.insecure_clone()],
     )
     .await?;
 
     // Claim seats
-    let claim_seat_ix: Instruction = claim_seat_instruction(&market_keypair.pubkey(), &payer);
+    let claim_seat_ix: Instruction = claim_seat_instruction(&market_key, &payer);
     send_tx_with_retry(
         Rc::clone(&context),
         &[claim_seat_ix],
@@ -153,7 +148,7 @@ async fn token22_base() -> anyhow::Result<()> {
 
     // Call deposit for each token account for a partial amount so we can swap later.
     let deposit_spl_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         1_000_000_000,
@@ -162,7 +157,7 @@ async fn token22_base() -> anyhow::Result<()> {
         None,
     );
     let deposit_usdc_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &usdc_mint_key,
         1_000_000_000,
@@ -180,7 +175,7 @@ async fn token22_base() -> anyhow::Result<()> {
 
     // Call withdraw
     let withdraw_spl_ix: Instruction = withdraw_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         1_000,
@@ -189,7 +184,7 @@ async fn token22_base() -> anyhow::Result<()> {
         None,
     );
     let withdraw_usdc_ix: Instruction = withdraw_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &usdc_mint_key,
         1_000,
@@ -208,7 +203,7 @@ async fn token22_base() -> anyhow::Result<()> {
         let market_account: solana_sdk::account::Account = context
             .borrow_mut()
             .banks_client
-            .get_account(market_keypair.pubkey())
+            .get_account(market_key)
             .await
             .unwrap()
             .unwrap();
@@ -221,7 +216,7 @@ async fn token22_base() -> anyhow::Result<()> {
 
     // Place orders on both sides to
     let place_order_ix: Instruction = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         None,
         vec![],
@@ -258,7 +253,7 @@ async fn token22_base() -> anyhow::Result<()> {
 
     // Swap using both directions
     let swap_base_in_ix: Instruction = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         &usdc_mint_key,
@@ -273,7 +268,7 @@ async fn token22_base() -> anyhow::Result<()> {
         false,
     );
     let swap_base_out_ix: Instruction = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         &usdc_mint_key,
@@ -311,8 +306,6 @@ async fn token22_quote() -> anyhow::Result<()> {
 
     solana_logger::setup_with_default(RUST_LOG_DEFAULT);
 
-    let market_keypair: Keypair = Keypair::new();
-
     let context: Rc<RefCell<ProgramTestContext>> =
         Rc::new(RefCell::new(program_test.start_with_context().await));
 
@@ -332,23 +325,19 @@ async fn token22_quote() -> anyhow::Result<()> {
     let spl_mint_key: Pubkey = spl_mint_f.key;
 
     // Create the market with SPL as base which is normal, USDC as quote which is 2022.
-    let create_market_ixs: Vec<Instruction> = create_market_instructions(
-        &market_keypair.pubkey(),
-        &spl_mint_f.key,
-        &usdc_mint_f.key,
-        payer,
-    )
-    .unwrap();
+    let (market_key, _) = get_market_address(0, &usdc_mint_f.key);
+    let create_market_ixs: Vec<Instruction> =
+        create_market_instructions(0, 9, &usdc_mint_f.key, payer, 1000, 500, Pubkey::default(), 0, 200);
     send_tx_with_retry(
         Rc::clone(&context),
         &create_market_ixs[..],
         Some(&payer),
-        &[&payer_keypair.insecure_clone(), &market_keypair],
+        &[&payer_keypair.insecure_clone()],
     )
     .await?;
 
     // Claim seats
-    let claim_seat_ix: Instruction = claim_seat_instruction(&market_keypair.pubkey(), &payer);
+    let claim_seat_ix: Instruction = claim_seat_instruction(&market_key, &payer);
     send_tx_with_retry(
         Rc::clone(&context),
         &[claim_seat_ix],
@@ -435,7 +424,7 @@ async fn token22_quote() -> anyhow::Result<()> {
 
     // Call deposit for each token account for a partial amount so we can swap later.
     let deposit_spl_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         1_000_000_000,
@@ -444,7 +433,7 @@ async fn token22_quote() -> anyhow::Result<()> {
         None,
     );
     let deposit_usdc_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &usdc_mint_key,
         1_000_000_000,
@@ -462,7 +451,7 @@ async fn token22_quote() -> anyhow::Result<()> {
 
     // Call withdraw
     let withdraw_spl_ix: Instruction = withdraw_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         1_000,
@@ -471,7 +460,7 @@ async fn token22_quote() -> anyhow::Result<()> {
         None,
     );
     let withdraw_usdc_ix: Instruction = withdraw_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &usdc_mint_key,
         1_000,
@@ -489,7 +478,7 @@ async fn token22_quote() -> anyhow::Result<()> {
 
     // Place orders on both sides to
     let place_order_ix: Instruction = batch_update_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         None,
         vec![],
@@ -526,7 +515,7 @@ async fn token22_quote() -> anyhow::Result<()> {
 
     // Swap using both directions
     let swap_base_in_ix: Instruction = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         &usdc_mint_key,
@@ -541,7 +530,7 @@ async fn token22_quote() -> anyhow::Result<()> {
         false,
     );
     let swap_base_out_ix: Instruction = swap_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         &usdc_mint_key,
@@ -574,8 +563,6 @@ async fn token22_deposit_transfer_fee() -> anyhow::Result<()> {
         processor!(manifest::process_instruction),
     );
     solana_logger::setup_with_default(RUST_LOG_DEFAULT);
-
-    let market_keypair: Keypair = Keypair::new();
 
     let context: Rc<RefCell<ProgramTestContext>> =
         Rc::new(RefCell::new(program_test.start_with_context().await));
@@ -637,23 +624,19 @@ async fn token22_deposit_transfer_fee() -> anyhow::Result<()> {
     let spl_mint_key: Pubkey = spl_mint_keypair.pubkey();
 
     // Create the market with SPL as base which is 2022, USDC as quote which is normal.
-    let create_market_ixs: Vec<Instruction> = create_market_instructions(
-        &market_keypair.pubkey(),
-        &spl_mint_key,
-        &usdc_mint_f.key,
-        payer,
-    )
-    .unwrap();
+    let (market_key, _) = get_market_address(0, &usdc_mint_f.key);
+    let create_market_ixs: Vec<Instruction> =
+        create_market_instructions(0, 9, &usdc_mint_f.key, payer, 1000, 500, Pubkey::default(), 0, 200);
     send_tx_with_retry(
         Rc::clone(&context),
         &create_market_ixs[..],
         Some(&payer),
-        &[&payer_keypair.insecure_clone(), &market_keypair],
+        &[&payer_keypair.insecure_clone()],
     )
     .await?;
 
     // Claim seat
-    let claim_seat_ix: Instruction = claim_seat_instruction(&market_keypair.pubkey(), &payer);
+    let claim_seat_ix: Instruction = claim_seat_instruction(&market_key, &payer);
     send_tx_with_retry(
         Rc::clone(&context),
         &[claim_seat_ix],
@@ -709,7 +692,7 @@ async fn token22_deposit_transfer_fee() -> anyhow::Result<()> {
     .await?;
 
     let deposit_spl_ix: Instruction = deposit_instruction(
-        &market_keypair.pubkey(),
+        &market_key,
         &payer,
         &spl_mint_key,
         1_000_000_000,
@@ -728,7 +711,7 @@ async fn token22_deposit_transfer_fee() -> anyhow::Result<()> {
     let market_account: solana_sdk::account::Account = context
         .borrow_mut()
         .banks_client
-        .get_account(market_keypair.pubkey())
+        .get_account(market_key)
         .await
         .unwrap()
         .unwrap();

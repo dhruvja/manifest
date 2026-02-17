@@ -5,11 +5,11 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type CancelOrderParams = {
-  orderSequenceNumber: beet.bignum;
-  orderIndexHint: beet.COption<number>;
-};
+  orderSequenceNumber: beet.bignum
+  orderIndexHint: beet.COption<number>
+}
 
 /**
  * @category userTypes
@@ -21,5 +21,5 @@ export const cancelOrderParamsBeet =
       ['orderSequenceNumber', beet.u64],
       ['orderIndexHint', beet.coption(beet.u32)],
     ],
-    'CancelOrderParams',
-  );
+    'CancelOrderParams'
+  )

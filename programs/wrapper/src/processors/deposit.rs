@@ -50,15 +50,10 @@ pub(crate) fn process_deposit(
     let mint_account_info: MintAccountInfo =
         MintAccountInfo::new(next_account_info(account_iter)?)?;
 
+    // Perps: only quote (USDC) deposits allowed
     let mint: Pubkey = {
         let market_fixed: Ref<MarketFixed> = market.get_fixed()?;
-        let base_mint: &Pubkey = market_fixed.get_base_mint();
-        let quote_mint: &Pubkey = market_fixed.get_quote_mint();
-        if &trader_token_account.try_borrow_data()?[0..32] == base_mint.as_ref() {
-            *base_mint
-        } else {
-            *quote_mint
-        }
+        *market_fixed.get_quote_mint()
     };
 
     let WrapperDepositParams { amount_atoms } = WrapperDepositParams::try_from_slice(data)?;

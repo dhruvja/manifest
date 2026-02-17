@@ -5,11 +5,11 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type DepositParams = {
-  amountAtoms: beet.bignum;
-  traderIndexHint: beet.COption<number>;
-};
+  amountAtoms: beet.bignum
+  traderIndexHint: beet.COption<number>
+}
 
 /**
  * @category userTypes
@@ -20,5 +20,5 @@ export const depositParamsBeet = new beet.FixableBeetArgsStruct<DepositParams>(
     ['amountAtoms', beet.u64],
     ['traderIndexHint', beet.coption(beet.u32)],
   ],
-  'DepositParams',
-);
+  'DepositParams'
+)

@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   GlobalEvictParams,
   globalEvictParamsBeet,
-} from '../types/GlobalEvictParams';
+} from '../types/GlobalEvictParams'
 
 /**
  * @category Instructions
@@ -19,8 +19,8 @@ import {
  * @category generated
  */
 export type GlobalEvictInstructionArgs = {
-  params: GlobalEvictParams;
-};
+  params: GlobalEvictParams
+}
 /**
  * @category Instructions
  * @category GlobalEvict
@@ -28,15 +28,15 @@ export type GlobalEvictInstructionArgs = {
  */
 export const GlobalEvictStruct = new beet.BeetArgsStruct<
   GlobalEvictInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', globalEvictParamsBeet],
   ],
-  'GlobalEvictInstructionArgs',
-);
+  'GlobalEvictInstructionArgs'
+)
 /**
  * Accounts required by the _GlobalEvict_ instruction
  *
@@ -51,16 +51,16 @@ export const GlobalEvictStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type GlobalEvictInstructionAccounts = {
-  payer: web3.PublicKey;
-  global: web3.PublicKey;
-  mint: web3.PublicKey;
-  globalVault: web3.PublicKey;
-  traderToken: web3.PublicKey;
-  evicteeToken: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  global: web3.PublicKey
+  mint: web3.PublicKey
+  globalVault: web3.PublicKey
+  traderToken: web3.PublicKey
+  evicteeToken: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+}
 
-export const globalEvictInstructionDiscriminator = 11;
+export const globalEvictInstructionDiscriminator = 11
 
 /**
  * Creates a _GlobalEvict_ instruction.
@@ -75,12 +75,12 @@ export const globalEvictInstructionDiscriminator = 11;
 export function createGlobalEvictInstruction(
   accounts: GlobalEvictInstructionAccounts,
   args: GlobalEvictInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = GlobalEvictStruct.serialize({
     instructionDiscriminator: globalEvictInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -117,12 +117,12 @@ export function createGlobalEvictInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

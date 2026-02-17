@@ -1162,6 +1162,197 @@
         "type": "u8",
         "value": 13
       }
+    },
+    {
+      "name": "DelegateMarket",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Payer and market creator"
+          ]
+        },
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Market PDA to delegate"
+          ]
+        },
+        {
+          "name": "ownerProgram",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "Manifest program (owner of the PDA)"
+          ]
+        },
+        {
+          "name": "delegationProgram",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "MagicBlock delegation program"
+          ]
+        },
+        {
+          "name": "delegationRecord",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Delegation record PDA"
+          ]
+        },
+        {
+          "name": "delegationMetadata",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Delegation metadata PDA"
+          ]
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "System program"
+          ]
+        },
+        {
+          "name": "buffer",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Buffer account for delegation"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminant": {
+        "type": "u8",
+        "value": 14
+      }
+    },
+    {
+      "name": "CommitMarket",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Payer"
+          ]
+        },
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Delegated market account"
+          ]
+        },
+        {
+          "name": "magicProgram",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "MagicBlock magic program"
+          ]
+        },
+        {
+          "name": "magicContext",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "MagicBlock magic context"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminant": {
+        "type": "u8",
+        "value": 15
+      }
+    },
+    {
+      "name": "Liquidate",
+      "accounts": [
+        {
+          "name": "liquidator",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Liquidator"
+          ]
+        },
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Perps market account"
+          ]
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "System program"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "LiquidateParams"
+          }
+        }
+      ],
+      "discriminant": {
+        "type": "u8",
+        "value": 16
+      }
+    },
+    {
+      "name": "CrankFunding",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Payer / cranker"
+          ]
+        },
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Perps market account"
+          ]
+        },
+        {
+          "name": "pythPriceFeed",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "Pyth price feed account"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminant": {
+        "type": "u8",
+        "value": 17
+      }
     }
   ],
   "accounts": [
@@ -2107,6 +2298,18 @@
           }
         ]
       }
+    },
+    {
+      "name": "LiquidateParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "traderToLiquidate",
+            "type": "publicKey"
+          }
+        ]
+      }
     }
   ],
   "errors": [
@@ -2467,87 +2670,6 @@
         },
         {
           "name": "trader",
-          "type": "publicKey",
-          "index": false
-        },
-        {
-          "name": "price",
-          "type": {
-            "defined": "QuoteAtomsPerBaseAtom"
-          },
-          "index": false
-        },
-        {
-          "name": "baseAtoms",
-          "type": {
-            "defined": "BaseAtoms"
-          },
-          "index": false
-        },
-        {
-          "name": "orderSequenceNumber",
-          "type": "u64",
-          "index": false
-        },
-        {
-          "name": "orderIndex",
-          "type": "u32",
-          "index": false
-        },
-        {
-          "name": "lastValidSlot",
-          "type": "u32",
-          "index": false
-        },
-        {
-          "name": "orderType",
-          "type": {
-            "defined": "OrderType"
-          },
-          "index": false
-        },
-        {
-          "name": "isBid",
-          "type": "bool",
-          "index": false
-        },
-        {
-          "name": "padding",
-          "type": {
-            "array": [
-              "u8",
-              6
-            ]
-          },
-          "index": false
-        }
-      ]
-    },
-    {
-      "name": "PlaceOrderLogV2",
-      "discriminator": [
-        189,
-        97,
-        159,
-        235,
-        136,
-        5,
-        1,
-        141
-      ],
-      "fields": [
-        {
-          "name": "market",
-          "type": "publicKey",
-          "index": false
-        },
-        {
-          "name": "trader",
-          "type": "publicKey",
-          "index": false
-        },
-        {
-          "name": "payer",
           "type": "publicKey",
           "index": false
         },

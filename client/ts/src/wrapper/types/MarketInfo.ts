@@ -5,19 +5,19 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 export type MarketInfo = {
-  market: web3.PublicKey;
-  ordersRootIndex: number;
-  traderIndex: number;
-  baseBalance: beet.bignum;
-  quoteBalance: beet.bignum;
-  quoteVolume: beet.bignum;
-  lastUpdatedSlot: number;
-  padding: number[] /* size: 3 */;
-};
+  market: web3.PublicKey
+  ordersRootIndex: number
+  traderIndex: number
+  baseBalance: beet.bignum
+  quoteBalance: beet.bignum
+  quoteVolume: beet.bignum
+  lastUpdatedSlot: number
+  padding: number[] /* size: 3 */
+}
 
 /**
  * @category userTypes
@@ -34,5 +34,5 @@ export const marketInfoBeet = new beet.BeetArgsStruct<MarketInfo>(
     ['lastUpdatedSlot', beet.u32],
     ['padding', beet.uniformFixedSizeArray(beet.u32, 3)],
   ],
-  'MarketInfo',
-);
+  'MarketInfo'
+)

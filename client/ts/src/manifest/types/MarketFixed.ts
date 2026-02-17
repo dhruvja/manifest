@@ -5,33 +5,33 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 export type MarketFixed = {
-  discriminant: beet.bignum;
-  version: number;
-  baseMintDecimals: number;
-  quoteMintDecimals: number;
-  baseVaultBump: number;
-  quoteVaultBump: number;
-  padding1: number[] /* size: 3 */;
-  baseMint: web3.PublicKey;
-  quoteMint: web3.PublicKey;
-  baseVault: web3.PublicKey;
-  quoteVault: web3.PublicKey;
-  orderSequenceNumber: beet.bignum;
-  numBytesAllocated: number;
-  bidsRootIndex: number;
-  bidsBestIndex: number;
-  asksRootIndex: number;
-  asksBestIndex: number;
-  claimedSeatsRootIndex: number;
-  freeListHeadIndex: number;
-  padding2: number[] /* size: 1 */;
-  quoteVolume: beet.bignum;
-  padding3: beet.bignum[] /* size: 8 */;
-};
+  discriminant: beet.bignum
+  version: number
+  baseMintDecimals: number
+  quoteMintDecimals: number
+  baseVaultBump: number
+  quoteVaultBump: number
+  padding1: number[] /* size: 3 */
+  baseMint: web3.PublicKey
+  quoteMint: web3.PublicKey
+  baseVault: web3.PublicKey
+  quoteVault: web3.PublicKey
+  orderSequenceNumber: beet.bignum
+  numBytesAllocated: number
+  bidsRootIndex: number
+  bidsBestIndex: number
+  asksRootIndex: number
+  asksBestIndex: number
+  claimedSeatsRootIndex: number
+  freeListHeadIndex: number
+  padding2: number[] /* size: 1 */
+  quoteVolume: beet.bignum
+  padding3: beet.bignum[] /* size: 8 */
+}
 
 /**
  * @category userTypes
@@ -62,5 +62,5 @@ export const marketFixedBeet = new beet.BeetArgsStruct<MarketFixed>(
     ['quoteVolume', beet.u64],
     ['padding3', beet.uniformFixedSizeArray(beet.u64, 8)],
   ],
-  'MarketFixed',
-);
+  'MarketFixed'
+)

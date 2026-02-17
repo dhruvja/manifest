@@ -19,12 +19,12 @@ pub mod certora;
 use hypertree::trace;
 use program::{
     batch_update::process_batch_update, claim_seat::process_claim_seat,
-    create_market::process_create_market, deposit::process_deposit,
-    expand_market::process_expand_market, global_add_trader::process_global_add_trader,
-    global_clean::process_global_clean, global_create::process_global_create,
-    global_deposit::process_global_deposit, global_evict::process_global_evict,
-    global_withdraw::process_global_withdraw, process_swap, withdraw::process_withdraw,
-    ManifestInstruction,
+    crank_funding::process_crank_funding, create_market::process_create_market,
+    deposit::process_deposit, expand_market::process_expand_market,
+    global_add_trader::process_global_add_trader, global_clean::process_global_clean,
+    global_create::process_global_create, global_deposit::process_global_deposit,
+    global_evict::process_global_evict, global_withdraw::process_global_withdraw,
+    liquidate::process_liquidate, process_swap, withdraw::process_withdraw, ManifestInstruction,
 };
 use solana_program::{
     account_info::AccountInfo, declare_id, entrypoint::ProgramResult, program_error::ProgramError,
@@ -93,7 +93,7 @@ security_txt! {
 // transaction limit before an attacker is able to clear a substantial number of
 // seats in one transaction.
 
-declare_id!("MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms");
+declare_id!("5QEqei6GyEu44vkh12gJNndqXmbmLy23VcTHWnRjQgG5");
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);
@@ -154,6 +154,18 @@ pub fn process_instruction(
         }
         ManifestInstruction::GlobalClean => {
             process_global_clean(program_id, accounts, data)?;
+        }
+        ManifestInstruction::DelegateMarket => {
+            program::delegate_market::process_delegate_market(program_id, accounts, data)?;
+        }
+        ManifestInstruction::CommitMarket => {
+            program::commit_market::process_commit_market(program_id, accounts, data)?;
+        }
+        ManifestInstruction::Liquidate => {
+            process_liquidate(program_id, accounts, data)?;
+        }
+        ManifestInstruction::CrankFunding => {
+            process_crank_funding(program_id, accounts, data)?;
         }
     }
 

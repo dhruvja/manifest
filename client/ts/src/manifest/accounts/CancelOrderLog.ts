@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link CancelOrderLog}
@@ -15,10 +15,10 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type CancelOrderLogArgs = {
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-  orderSequenceNumber: beet.bignum;
-};
+  market: web3.PublicKey
+  trader: web3.PublicKey
+  orderSequenceNumber: beet.bignum
+}
 /**
  * Holds the data for the {@link CancelOrderLog} Account and provides de/serialization
  * functionality for that data
@@ -30,7 +30,7 @@ export class CancelOrderLog implements CancelOrderLogArgs {
   private constructor(
     readonly market: web3.PublicKey,
     readonly trader: web3.PublicKey,
-    readonly orderSequenceNumber: beet.bignum,
+    readonly orderSequenceNumber: beet.bignum
   ) {}
 
   /**
@@ -40,8 +40,8 @@ export class CancelOrderLog implements CancelOrderLogArgs {
     return new CancelOrderLog(
       args.market,
       args.trader,
-      args.orderSequenceNumber,
-    );
+      args.orderSequenceNumber
+    )
   }
 
   /**
@@ -50,9 +50,9 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [CancelOrderLog, number] {
-    return CancelOrderLog.deserialize(accountInfo.data, offset);
+    return CancelOrderLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -64,16 +64,16 @@ export class CancelOrderLog implements CancelOrderLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<CancelOrderLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find CancelOrderLog account at ${address}`);
+      throw new Error(`Unable to find CancelOrderLog account at ${address}`)
     }
-    return CancelOrderLog.fromAccountInfo(accountInfo, 0)[0];
+    return CancelOrderLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -84,10 +84,10 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, cancelOrderLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, cancelOrderLogBeet)
   }
 
   /**
@@ -95,7 +95,7 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [CancelOrderLog, number] {
-    return cancelOrderLogBeet.deserialize(buf, offset);
+    return cancelOrderLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -103,7 +103,7 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return cancelOrderLogBeet.serialize(this);
+    return cancelOrderLogBeet.serialize(this)
   }
 
   /**
@@ -111,7 +111,7 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    * {@link CancelOrderLog}
    */
   static get byteSize() {
-    return cancelOrderLogBeet.byteSize;
+    return cancelOrderLogBeet.byteSize
   }
 
   /**
@@ -122,12 +122,12 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       CancelOrderLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -135,7 +135,7 @@ export class CancelOrderLog implements CancelOrderLogArgs {
    * hold {@link CancelOrderLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === CancelOrderLog.byteSize;
+    return buf.byteLength - offset === CancelOrderLog.byteSize
   }
 
   /**
@@ -147,17 +147,17 @@ export class CancelOrderLog implements CancelOrderLogArgs {
       market: this.market.toBase58(),
       trader: this.trader.toBase58(),
       orderSequenceNumber: (() => {
-        const x = <{ toNumber: () => number }>this.orderSequenceNumber;
+        const x = <{ toNumber: () => number }>this.orderSequenceNumber
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -175,5 +175,5 @@ export const cancelOrderLogBeet = new beet.BeetStruct<
     ['orderSequenceNumber', beet.u64],
   ],
   CancelOrderLog.fromArgs,
-  'CancelOrderLog',
-);
+  'CancelOrderLog'
+)

@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
 
 /**
  * Arguments used to create {@link GlobalAddTraderLog}
@@ -15,9 +15,9 @@ import * as beet from '@metaplex-foundation/beet';
  * @category generated
  */
 export type GlobalAddTraderLogArgs = {
-  global: web3.PublicKey;
-  trader: web3.PublicKey;
-};
+  global: web3.PublicKey
+  trader: web3.PublicKey
+}
 /**
  * Holds the data for the {@link GlobalAddTraderLog} Account and provides de/serialization
  * functionality for that data
@@ -28,14 +28,14 @@ export type GlobalAddTraderLogArgs = {
 export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
   private constructor(
     readonly global: web3.PublicKey,
-    readonly trader: web3.PublicKey,
+    readonly trader: web3.PublicKey
   ) {}
 
   /**
    * Creates a {@link GlobalAddTraderLog} instance from the provided args.
    */
   static fromArgs(args: GlobalAddTraderLogArgs) {
-    return new GlobalAddTraderLog(args.global, args.trader);
+    return new GlobalAddTraderLog(args.global, args.trader)
   }
 
   /**
@@ -44,9 +44,9 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalAddTraderLog, number] {
-    return GlobalAddTraderLog.deserialize(accountInfo.data, offset);
+    return GlobalAddTraderLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -58,18 +58,16 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalAddTraderLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(
-        `Unable to find GlobalAddTraderLog account at ${address}`,
-      );
+      throw new Error(`Unable to find GlobalAddTraderLog account at ${address}`)
     }
-    return GlobalAddTraderLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalAddTraderLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -80,10 +78,10 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalAddTraderLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalAddTraderLogBeet)
   }
 
   /**
@@ -91,7 +89,7 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalAddTraderLog, number] {
-    return globalAddTraderLogBeet.deserialize(buf, offset);
+    return globalAddTraderLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -99,7 +97,7 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalAddTraderLogBeet.serialize(this);
+    return globalAddTraderLogBeet.serialize(this)
   }
 
   /**
@@ -107,7 +105,7 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    * {@link GlobalAddTraderLog}
    */
   static get byteSize() {
-    return globalAddTraderLogBeet.byteSize;
+    return globalAddTraderLogBeet.byteSize
   }
 
   /**
@@ -118,12 +116,12 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalAddTraderLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -131,7 +129,7 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
    * hold {@link GlobalAddTraderLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalAddTraderLog.byteSize;
+    return buf.byteLength - offset === GlobalAddTraderLog.byteSize
   }
 
   /**
@@ -142,7 +140,7 @@ export class GlobalAddTraderLog implements GlobalAddTraderLogArgs {
     return {
       global: this.global.toBase58(),
       trader: this.trader.toBase58(),
-    };
+    }
   }
 }
 
@@ -159,5 +157,5 @@ export const globalAddTraderLogBeet = new beet.BeetStruct<
     ['trader', beetSolana.publicKey],
   ],
   GlobalAddTraderLog.fromArgs,
-  'GlobalAddTraderLog',
-);
+  'GlobalAddTraderLog'
+)

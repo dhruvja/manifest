@@ -5,12 +5,12 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   GlobalCleanParams,
   globalCleanParamsBeet,
-} from '../types/GlobalCleanParams';
+} from '../types/GlobalCleanParams'
 
 /**
  * @category Instructions
@@ -18,8 +18,8 @@ import {
  * @category generated
  */
 export type GlobalCleanInstructionArgs = {
-  params: GlobalCleanParams;
-};
+  params: GlobalCleanParams
+}
 /**
  * @category Instructions
  * @category GlobalClean
@@ -27,15 +27,15 @@ export type GlobalCleanInstructionArgs = {
  */
 export const GlobalCleanStruct = new beet.BeetArgsStruct<
   GlobalCleanInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', globalCleanParamsBeet],
   ],
-  'GlobalCleanInstructionArgs',
-);
+  'GlobalCleanInstructionArgs'
+)
 /**
  * Accounts required by the _GlobalClean_ instruction
  *
@@ -47,13 +47,13 @@ export const GlobalCleanStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type GlobalCleanInstructionAccounts = {
-  payer: web3.PublicKey;
-  market: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  global: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  market: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  global: web3.PublicKey
+}
 
-export const globalCleanInstructionDiscriminator = 12;
+export const globalCleanInstructionDiscriminator = 12
 
 /**
  * Creates a _GlobalClean_ instruction.
@@ -68,12 +68,12 @@ export const globalCleanInstructionDiscriminator = 12;
 export function createGlobalCleanInstruction(
   accounts: GlobalCleanInstructionAccounts,
   args: GlobalCleanInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = GlobalCleanStruct.serialize({
     instructionDiscriminator: globalCleanInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -95,12 +95,12 @@ export function createGlobalCleanInstruction(
       isWritable: true,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

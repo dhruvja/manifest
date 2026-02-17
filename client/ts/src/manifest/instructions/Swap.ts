@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import { SwapParams, swapParamsBeet } from '../types/SwapParams';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import { SwapParams, swapParamsBeet } from '../types/SwapParams'
 
 /**
  * @category Instructions
@@ -15,8 +15,8 @@ import { SwapParams, swapParamsBeet } from '../types/SwapParams';
  * @category generated
  */
 export type SwapInstructionArgs = {
-  params: SwapParams;
-};
+  params: SwapParams
+}
 /**
  * @category Instructions
  * @category Swap
@@ -24,21 +24,20 @@ export type SwapInstructionArgs = {
  */
 export const SwapStruct = new beet.BeetArgsStruct<
   SwapInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', swapParamsBeet],
   ],
-  'SwapInstructionArgs',
-);
+  'SwapInstructionArgs'
+)
 /**
  * Accounts required by the _Swap_ instruction
  *
  * @property [_writable_, **signer**] payer
  * @property [_writable_] market
- * @property [] systemProgram
  * @property [_writable_] traderBase
  * @property [_writable_] traderQuote
  * @property [_writable_] baseVault
@@ -54,22 +53,22 @@ export const SwapStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type SwapInstructionAccounts = {
-  payer: web3.PublicKey;
-  market: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  traderBase: web3.PublicKey;
-  traderQuote: web3.PublicKey;
-  baseVault: web3.PublicKey;
-  quoteVault: web3.PublicKey;
-  tokenProgramBase: web3.PublicKey;
-  baseMint?: web3.PublicKey;
-  tokenProgramQuote?: web3.PublicKey;
-  quoteMint?: web3.PublicKey;
-  global?: web3.PublicKey;
-  globalVault?: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  market: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  traderBase: web3.PublicKey
+  traderQuote: web3.PublicKey
+  baseVault: web3.PublicKey
+  quoteVault: web3.PublicKey
+  tokenProgramBase: web3.PublicKey
+  baseMint?: web3.PublicKey
+  tokenProgramQuote?: web3.PublicKey
+  quoteMint?: web3.PublicKey
+  global?: web3.PublicKey
+  globalVault?: web3.PublicKey
+}
 
-export const swapInstructionDiscriminator = 4;
+export const swapInstructionDiscriminator = 4
 
 /**
  * Creates a _Swap_ instruction.
@@ -89,12 +88,12 @@ export const swapInstructionDiscriminator = 4;
 export function createSwapInstruction(
   accounts: SwapInstructionAccounts,
   args: SwapInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = SwapStruct.serialize({
     instructionDiscriminator: swapInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -136,38 +135,38 @@ export function createSwapInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   if (accounts.baseMint != null) {
     keys.push({
       pubkey: accounts.baseMint,
       isWritable: false,
       isSigner: false,
-    });
+    })
   }
   if (accounts.tokenProgramQuote != null) {
     if (accounts.baseMint == null) {
       throw new Error(
-        "When providing 'tokenProgramQuote' then 'accounts.baseMint' need(s) to be provided as well.",
-      );
+        "When providing 'tokenProgramQuote' then 'accounts.baseMint' need(s) to be provided as well."
+      )
     }
     keys.push({
       pubkey: accounts.tokenProgramQuote,
       isWritable: false,
       isSigner: false,
-    });
+    })
   }
   if (accounts.quoteMint != null) {
     if (accounts.baseMint == null || accounts.tokenProgramQuote == null) {
       throw new Error(
-        "When providing 'quoteMint' then 'accounts.baseMint', 'accounts.tokenProgramQuote' need(s) to be provided as well.",
-      );
+        "When providing 'quoteMint' then 'accounts.baseMint', 'accounts.tokenProgramQuote' need(s) to be provided as well."
+      )
     }
     keys.push({
       pubkey: accounts.quoteMint,
       isWritable: false,
       isSigner: false,
-    });
+    })
   }
   if (accounts.global != null) {
     if (
@@ -176,14 +175,14 @@ export function createSwapInstruction(
       accounts.quoteMint == null
     ) {
       throw new Error(
-        "When providing 'global' then 'accounts.baseMint', 'accounts.tokenProgramQuote', 'accounts.quoteMint' need(s) to be provided as well.",
-      );
+        "When providing 'global' then 'accounts.baseMint', 'accounts.tokenProgramQuote', 'accounts.quoteMint' need(s) to be provided as well."
+      )
     }
     keys.push({
       pubkey: accounts.global,
       isWritable: true,
       isSigner: false,
-    });
+    })
   }
   if (accounts.globalVault != null) {
     if (
@@ -193,20 +192,20 @@ export function createSwapInstruction(
       accounts.global == null
     ) {
       throw new Error(
-        "When providing 'globalVault' then 'accounts.baseMint', 'accounts.tokenProgramQuote', 'accounts.quoteMint', 'accounts.global' need(s) to be provided as well.",
-      );
+        "When providing 'globalVault' then 'accounts.baseMint', 'accounts.tokenProgramQuote', 'accounts.quoteMint', 'accounts.global' need(s) to be provided as well."
+      )
     }
     keys.push({
       pubkey: accounts.globalVault,
       isWritable: true,
       isSigner: false,
-    });
+    })
   }
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

@@ -863,6 +863,12 @@
           },
           {
             "name": "Global"
+          },
+          {
+            "name": "Reverse"
+          },
+          {
+            "name": "ReverseTight"
           }
         ]
       }

@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   GlobalDepositParams,
   globalDepositParamsBeet,
-} from '../types/GlobalDepositParams';
+} from '../types/GlobalDepositParams'
 
 /**
  * @category Instructions
@@ -19,8 +19,8 @@ import {
  * @category generated
  */
 export type GlobalDepositInstructionArgs = {
-  params: GlobalDepositParams;
-};
+  params: GlobalDepositParams
+}
 /**
  * @category Instructions
  * @category GlobalDeposit
@@ -28,15 +28,15 @@ export type GlobalDepositInstructionArgs = {
  */
 export const GlobalDepositStruct = new beet.BeetArgsStruct<
   GlobalDepositInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', globalDepositParamsBeet],
   ],
-  'GlobalDepositInstructionArgs',
-);
+  'GlobalDepositInstructionArgs'
+)
 /**
  * Accounts required by the _GlobalDeposit_ instruction
  *
@@ -50,15 +50,15 @@ export const GlobalDepositStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type GlobalDepositInstructionAccounts = {
-  payer: web3.PublicKey;
-  global: web3.PublicKey;
-  mint: web3.PublicKey;
-  globalVault: web3.PublicKey;
-  traderToken: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  global: web3.PublicKey
+  mint: web3.PublicKey
+  globalVault: web3.PublicKey
+  traderToken: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+}
 
-export const globalDepositInstructionDiscriminator = 9;
+export const globalDepositInstructionDiscriminator = 9
 
 /**
  * Creates a _GlobalDeposit_ instruction.
@@ -73,12 +73,12 @@ export const globalDepositInstructionDiscriminator = 9;
 export function createGlobalDepositInstruction(
   accounts: GlobalDepositInstructionAccounts,
   args: GlobalDepositInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = GlobalDepositStruct.serialize({
     instructionDiscriminator: globalDepositInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -110,12 +110,12 @@ export function createGlobalDepositInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

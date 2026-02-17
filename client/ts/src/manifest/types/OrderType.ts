@@ -5,7 +5,7 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 /**
  * @category enums
  * @category generated
@@ -24,5 +24,5 @@ export enum OrderType {
  * @category generated
  */
 export const orderTypeBeet = beet.fixedScalarEnum(
-  OrderType,
-) as beet.FixedSizeBeet<OrderType, OrderType>;
+  OrderType
+) as beet.FixedSizeBeet<OrderType, OrderType>

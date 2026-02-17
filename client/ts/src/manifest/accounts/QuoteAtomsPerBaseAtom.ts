@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link QuoteAtomsPerBaseAtom}
@@ -15,8 +15,8 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type QuoteAtomsPerBaseAtomArgs = {
-  inner: beet.bignum;
-};
+  inner: beet.bignum
+}
 /**
  * Holds the data for the {@link QuoteAtomsPerBaseAtom} Account and provides de/serialization
  * functionality for that data
@@ -31,7 +31,7 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    * Creates a {@link QuoteAtomsPerBaseAtom} instance from the provided args.
    */
   static fromArgs(args: QuoteAtomsPerBaseAtomArgs) {
-    return new QuoteAtomsPerBaseAtom(args.inner);
+    return new QuoteAtomsPerBaseAtom(args.inner)
   }
 
   /**
@@ -40,9 +40,9 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [QuoteAtomsPerBaseAtom, number] {
-    return QuoteAtomsPerBaseAtom.deserialize(accountInfo.data, offset);
+    return QuoteAtomsPerBaseAtom.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -54,18 +54,18 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<QuoteAtomsPerBaseAtom> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
       throw new Error(
-        `Unable to find QuoteAtomsPerBaseAtom account at ${address}`,
-      );
+        `Unable to find QuoteAtomsPerBaseAtom account at ${address}`
+      )
     }
-    return QuoteAtomsPerBaseAtom.fromAccountInfo(accountInfo, 0)[0];
+    return QuoteAtomsPerBaseAtom.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -76,13 +76,13 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
     return beetSolana.GpaBuilder.fromStruct(
       programId,
-      quoteAtomsPerBaseAtomBeet,
-    );
+      quoteAtomsPerBaseAtomBeet
+    )
   }
 
   /**
@@ -90,7 +90,7 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [QuoteAtomsPerBaseAtom, number] {
-    return quoteAtomsPerBaseAtomBeet.deserialize(buf, offset);
+    return quoteAtomsPerBaseAtomBeet.deserialize(buf, offset)
   }
 
   /**
@@ -98,7 +98,7 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return quoteAtomsPerBaseAtomBeet.serialize(this);
+    return quoteAtomsPerBaseAtomBeet.serialize(this)
   }
 
   /**
@@ -106,7 +106,7 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    * {@link QuoteAtomsPerBaseAtom}
    */
   static get byteSize() {
-    return quoteAtomsPerBaseAtomBeet.byteSize;
+    return quoteAtomsPerBaseAtomBeet.byteSize
   }
 
   /**
@@ -117,12 +117,12 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       QuoteAtomsPerBaseAtom.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -130,7 +130,7 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
    * hold {@link QuoteAtomsPerBaseAtom} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === QuoteAtomsPerBaseAtom.byteSize;
+    return buf.byteLength - offset === QuoteAtomsPerBaseAtom.byteSize
   }
 
   /**
@@ -140,17 +140,17 @@ export class QuoteAtomsPerBaseAtom implements QuoteAtomsPerBaseAtomArgs {
   pretty() {
     return {
       inner: (() => {
-        const x = <{ toNumber: () => number }>this.inner;
+        const x = <{ toNumber: () => number }>this.inner
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -164,5 +164,5 @@ export const quoteAtomsPerBaseAtomBeet = new beet.BeetStruct<
 >(
   [['inner', beet.u128]],
   QuoteAtomsPerBaseAtom.fromArgs,
-  'QuoteAtomsPerBaseAtom',
-);
+  'QuoteAtomsPerBaseAtom'
+)

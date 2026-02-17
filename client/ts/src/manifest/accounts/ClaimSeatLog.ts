@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
 
 /**
  * Arguments used to create {@link ClaimSeatLog}
@@ -15,9 +15,9 @@ import * as beet from '@metaplex-foundation/beet';
  * @category generated
  */
 export type ClaimSeatLogArgs = {
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-};
+  market: web3.PublicKey
+  trader: web3.PublicKey
+}
 /**
  * Holds the data for the {@link ClaimSeatLog} Account and provides de/serialization
  * functionality for that data
@@ -28,14 +28,14 @@ export type ClaimSeatLogArgs = {
 export class ClaimSeatLog implements ClaimSeatLogArgs {
   private constructor(
     readonly market: web3.PublicKey,
-    readonly trader: web3.PublicKey,
+    readonly trader: web3.PublicKey
   ) {}
 
   /**
    * Creates a {@link ClaimSeatLog} instance from the provided args.
    */
   static fromArgs(args: ClaimSeatLogArgs) {
-    return new ClaimSeatLog(args.market, args.trader);
+    return new ClaimSeatLog(args.market, args.trader)
   }
 
   /**
@@ -44,9 +44,9 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [ClaimSeatLog, number] {
-    return ClaimSeatLog.deserialize(accountInfo.data, offset);
+    return ClaimSeatLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -58,16 +58,16 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<ClaimSeatLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find ClaimSeatLog account at ${address}`);
+      throw new Error(`Unable to find ClaimSeatLog account at ${address}`)
     }
-    return ClaimSeatLog.fromAccountInfo(accountInfo, 0)[0];
+    return ClaimSeatLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -78,10 +78,10 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, claimSeatLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, claimSeatLogBeet)
   }
 
   /**
@@ -89,7 +89,7 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [ClaimSeatLog, number] {
-    return claimSeatLogBeet.deserialize(buf, offset);
+    return claimSeatLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -97,7 +97,7 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return claimSeatLogBeet.serialize(this);
+    return claimSeatLogBeet.serialize(this)
   }
 
   /**
@@ -105,7 +105,7 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    * {@link ClaimSeatLog}
    */
   static get byteSize() {
-    return claimSeatLogBeet.byteSize;
+    return claimSeatLogBeet.byteSize
   }
 
   /**
@@ -116,12 +116,12 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       ClaimSeatLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -129,7 +129,7 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
    * hold {@link ClaimSeatLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === ClaimSeatLog.byteSize;
+    return buf.byteLength - offset === ClaimSeatLog.byteSize
   }
 
   /**
@@ -140,7 +140,7 @@ export class ClaimSeatLog implements ClaimSeatLogArgs {
     return {
       market: this.market.toBase58(),
       trader: this.trader.toBase58(),
-    };
+    }
   }
 }
 
@@ -157,5 +157,5 @@ export const claimSeatLogBeet = new beet.BeetStruct<
     ['trader', beetSolana.publicKey],
   ],
   ClaimSeatLog.fromArgs,
-  'ClaimSeatLog',
-);
+  'ClaimSeatLog'
+)

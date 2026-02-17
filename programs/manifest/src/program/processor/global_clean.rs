@@ -78,11 +78,8 @@ pub(crate) fn process_global_clean(
         )?;
 
         let resting_order: &RestingOrder = resting_order_node.get_value();
-        let expected_global_mint: &Pubkey = if resting_order.get_is_bid() {
-            market_dynamic_account.get_quote_mint()
-        } else {
-            market_dynamic_account.get_base_mint()
-        };
+        // In perps, only quote mint is used for globals (base is virtual)
+        let expected_global_mint: &Pubkey = market_dynamic_account.get_quote_mint();
         let global_mint: &Pubkey = global_dynamic_account.fixed.get_mint();
 
         // Verify that the resting order uses the global account given.

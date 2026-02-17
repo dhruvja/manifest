@@ -136,21 +136,15 @@ pub struct MarketFixed {
 
     /// Version
     version: u8,
+    /// Index identifying the base asset (e.g., 0=SOL, 1=ETH).
+    /// Used in PDA seeds: [b"market", &[base_mint_index], quote_mint]
+    base_mint_index: u8,
     base_mint_decimals: u8,
     quote_mint_decimals: u8,
-    base_vault_bump: u8,
-    quote_vault_bump: u8,
-    _padding1: [u8; 3],
+    _padding1: [u8; 4],
 
-    /// Base mint
-    base_mint: Pubkey,
-    /// Quote mint
+    /// Quote mint (USDC)
     quote_mint: Pubkey,
-
-    /// Base vault
-    base_vault: Pubkey,
-    /// Quote vault
-    quote_vault: Pubkey,
 
     /// The sequence number of the next order.
     order_sequence_number: u64,
@@ -196,27 +190,78 @@ pub struct MarketFixed {
     /// Quote tokens reserved for non-global orders
     pub orderbook_quote_atoms: QuoteAtoms,
     #[cfg(feature = "certora")]
-    _padding3: [u64; 4],
+    /// Initial margin in basis points (e.g., 1000 = 10% = 10x leverage)
+    initial_margin_bps: u64,
+    #[cfg(feature = "certora")]
+    /// Maintenance margin in basis points (e.g., 500 = 5%)
+    maintenance_margin_bps: u64,
+    #[cfg(feature = "certora")]
+    pyth_feed_account: Pubkey,
+    #[cfg(feature = "certora")]
+    oracle_price_mantissa: u64,
+    #[cfg(feature = "certora")]
+    oracle_price_expo_and_pad: u64,
+    #[cfg(feature = "certora")]
+    last_funding_timestamp: u64,
+    #[cfg(feature = "certora")]
+    cumulative_funding: u64,
+    #[cfg(feature = "certora")]
+    insurance_fund_balance: u64,
+    #[cfg(feature = "certora")]
+    taker_fee_bps: u64,
+    #[cfg(feature = "certora")]
+    liquidation_buffer_bps: u64,
+    #[cfg(feature = "certora")]
+    _padding3: [u64; 3],
 
-    // Unused padding. Saved in case a later version wants to be backwards
-    // compatible. Also, it is nice to have the fixed size be a round number,
-    // 256 bytes.
+    /// Initial margin in basis points (e.g., 1000 = 10% = 10x leverage)
     #[cfg(not(feature = "certora"))]
-    _padding3: [u64; 8],
+    initial_margin_bps: u64,
+    /// Maintenance margin in basis points (e.g., 500 = 5%)
+    #[cfg(not(feature = "certora"))]
+    maintenance_margin_bps: u64,
+    /// Total open long position in base atoms across all traders
+    #[cfg(not(feature = "certora"))]
+    total_long_base_atoms: u64,
+    /// Total open short position in base atoms across all traders
+    #[cfg(not(feature = "certora"))]
+    total_short_base_atoms: u64,
+    /// Pyth price feed account expected for this market
+    #[cfg(not(feature = "certora"))]
+    pyth_feed_account: Pubkey,
+    /// Cached oracle price mantissa (updated by CrankFunding)
+    #[cfg(not(feature = "certora"))]
+    oracle_price_mantissa: u64,
+    /// Cached oracle price exponent in lower 32 bits (i32), upper 32 bits padding
+    #[cfg(not(feature = "certora"))]
+    oracle_price_expo_and_pad: u64,
+    /// Unix timestamp of last funding crank
+    #[cfg(not(feature = "certora"))]
+    last_funding_timestamp: u64,
+    /// Cumulative funding per base atom, scaled by 1e9. Stored as u64, interpret as i64.
+    #[cfg(not(feature = "certora"))]
+    cumulative_funding: u64,
+    /// Insurance fund balance (virtual USDC ledger for bad debt coverage)
+    #[cfg(not(feature = "certora"))]
+    insurance_fund_balance: u64,
+    /// Taker fee in basis points (e.g., 5 = 0.05%)
+    #[cfg(not(feature = "certora"))]
+    taker_fee_bps: u64,
+    /// Buffer above maintenance margin to target after partial liquidation (basis points)
+    #[cfg(not(feature = "certora"))]
+    liquidation_buffer_bps: u64,
+    #[cfg(not(feature = "certora"))]
+    _padding3: [u64; 5],
 }
 const_assert_eq!(
     size_of::<MarketFixed>(),
     8 +   // discriminant
     1 +   // version
+    1 +   // base_mint_index
     1 +   // base_mint_decimals
     1 +   // quote_mint_decimals
-    1 +   // base_vault_bump
-    1 +   // quote_vault_bump
-    3 +   // padding
-    32 +  // base_mint
+    4 +   // padding1
     32 +  // quote_mint
-    32 +  // base_vault
-    32 +  // quote_vault
     8 +   // order_sequence_number
     4 +   // num_bytes_allocated
     4 +   // bids_root_index
@@ -224,10 +269,10 @@ const_assert_eq!(
     4 +   // asks_root_index
     4 +   // asks_best_index
     4 +   // claimed_seats_root_index
-    4 +   // claimed_seats_best_index
     4 +   // free_list_head_index
-    8 +   // padding2
-    64 // padding4
+    4 +   // padding2
+    8 +   // quote_volume
+    160   // perps + padding
 );
 const_assert_eq!(size_of::<MarketFixed>(), MARKET_FIXED_SIZE);
 const_assert_eq!(size_of::<MarketFixed>() % 8, 0);
@@ -235,24 +280,18 @@ impl Get for MarketFixed {}
 
 impl MarketFixed {
     pub fn new_empty(
-        base_mint: &MintAccountInfo,
+        base_mint_index: u8,
+        base_mint_decimals: u8,
         quote_mint: &MintAccountInfo,
-        market_key: &Pubkey,
     ) -> Self {
-        let (base_vault, base_vault_bump) = get_vault_address(market_key, base_mint.info.key);
-        let (quote_vault, quote_vault_bump) = get_vault_address(market_key, quote_mint.info.key);
         MarketFixed {
             discriminant: MARKET_FIXED_DISCRIMINANT,
             version: 0,
-            base_mint_decimals: base_mint.mint.decimals,
+            base_mint_index,
+            base_mint_decimals,
             quote_mint_decimals: quote_mint.mint.decimals,
-            base_vault_bump,
-            quote_vault_bump,
-            _padding1: [0; 3],
-            base_mint: *base_mint.info.key,
+            _padding1: [0; 4],
             quote_mint: *quote_mint.info.key,
-            base_vault,
-            quote_vault,
             order_sequence_number: 0,
             num_bytes_allocated: 0,
             bids_root_index: NIL,
@@ -268,7 +307,31 @@ impl MarketFixed {
             _padding2: [0; 1],
             quote_volume: QuoteAtoms::ZERO,
             #[cfg(not(feature = "certora"))]
-            _padding3: [0; 8],
+            initial_margin_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            maintenance_margin_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            total_long_base_atoms: 0,
+            #[cfg(not(feature = "certora"))]
+            total_short_base_atoms: 0,
+            #[cfg(not(feature = "certora"))]
+            pyth_feed_account: Pubkey::default(),
+            #[cfg(not(feature = "certora"))]
+            oracle_price_mantissa: 0,
+            #[cfg(not(feature = "certora"))]
+            oracle_price_expo_and_pad: 0,
+            #[cfg(not(feature = "certora"))]
+            last_funding_timestamp: 0,
+            #[cfg(not(feature = "certora"))]
+            cumulative_funding: 0,
+            #[cfg(not(feature = "certora"))]
+            insurance_fund_balance: 0,
+            #[cfg(not(feature = "certora"))]
+            taker_fee_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            liquidation_buffer_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            _padding3: [0; 5],
             #[cfg(feature = "certora")]
             withdrawable_base_atoms: BaseAtoms::new(0),
             #[cfg(feature = "certora")]
@@ -278,7 +341,27 @@ impl MarketFixed {
             #[cfg(feature = "certora")]
             orderbook_quote_atoms: QuoteAtoms::new(0),
             #[cfg(feature = "certora")]
-            _padding3: [0; 4],
+            initial_margin_bps: 0,
+            #[cfg(feature = "certora")]
+            maintenance_margin_bps: 0,
+            #[cfg(feature = "certora")]
+            pyth_feed_account: Pubkey::default(),
+            #[cfg(feature = "certora")]
+            oracle_price_mantissa: 0,
+            #[cfg(feature = "certora")]
+            oracle_price_expo_and_pad: 0,
+            #[cfg(feature = "certora")]
+            last_funding_timestamp: 0,
+            #[cfg(feature = "certora")]
+            cumulative_funding: 0,
+            #[cfg(feature = "certora")]
+            insurance_fund_balance: 0,
+            #[cfg(feature = "certora")]
+            taker_fee_bps: 0,
+            #[cfg(feature = "certora")]
+            liquidation_buffer_bps: 0,
+            #[cfg(feature = "certora")]
+            _padding3: [0; 3],
         }
     }
 
@@ -290,15 +373,11 @@ impl MarketFixed {
         MarketFixed {
             discriminant: MARKET_FIXED_DISCRIMINANT,
             version: 0,
+            base_mint_index: nondet(),
             base_mint_decimals: nondet(),
             quote_mint_decimals: nondet(),
-            base_vault_bump: nondet(),
-            quote_vault_bump: nondet(),
-            _padding1: [0; 3],
-            base_mint: nondet(),
+            _padding1: [0; 4],
             quote_mint: nondet(),
-            base_vault: nondet(),
-            quote_vault: nondet(),
             order_sequence_number: nondet(),
             num_bytes_allocated: nondet(),
             bids_root_index: NIL,
@@ -313,33 +392,31 @@ impl MarketFixed {
             withdrawable_quote_atoms: QuoteAtoms::new(nondet()),
             orderbook_base_atoms: BaseAtoms::new(nondet()),
             orderbook_quote_atoms: QuoteAtoms::new(nondet()),
-            _padding3: [0; 4],
+            initial_margin_bps: 0,
+            maintenance_margin_bps: 0,
+            pyth_feed_account: Pubkey::default(),
+            oracle_price_mantissa: 0,
+            oracle_price_expo_and_pad: 0,
+            last_funding_timestamp: 0,
+            cumulative_funding: 0,
+            insurance_fund_balance: 0,
+            taker_fee_bps: 0,
+            liquidation_buffer_bps: 0,
+            _padding3: [0; 3],
         }
     }
 
-    pub fn get_base_mint(&self) -> &Pubkey {
-        &self.base_mint
+    pub fn get_base_mint_index(&self) -> u8 {
+        self.base_mint_index
     }
     pub fn get_quote_mint(&self) -> &Pubkey {
         &self.quote_mint
-    }
-    pub fn get_base_vault(&self) -> &Pubkey {
-        &self.base_vault
-    }
-    pub fn get_quote_vault(&self) -> &Pubkey {
-        &self.quote_vault
     }
     pub fn get_base_mint_decimals(&self) -> u8 {
         self.base_mint_decimals
     }
     pub fn get_quote_mint_decimals(&self) -> u8 {
         self.quote_mint_decimals
-    }
-    pub fn get_base_vault_bump(&self) -> u8 {
-        self.base_vault_bump
-    }
-    pub fn get_quote_vault_bump(&self) -> u8 {
-        self.quote_vault_bump
     }
     pub fn get_quote_volume(&self) -> QuoteAtoms {
         self.quote_volume
@@ -357,6 +434,9 @@ impl MarketFixed {
     }
     pub(crate) fn get_asks_best_index(&self) -> DataIndex {
         self.asks_best_index
+    }
+    pub(crate) fn get_claimed_seats_root_index(&self) -> DataIndex {
+        self.claimed_seats_root_index
     }
 
     #[cfg(feature = "certora")]
@@ -379,6 +459,94 @@ impl MarketFixed {
     // Used in benchmark
     pub fn has_free_block(&self) -> bool {
         self.free_list_head_index != NIL
+    }
+
+    pub fn get_initial_margin_bps(&self) -> u64 {
+        self.initial_margin_bps
+    }
+    pub fn get_maintenance_margin_bps(&self) -> u64 {
+        self.maintenance_margin_bps
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn get_total_long_base_atoms(&self) -> u64 {
+        self.total_long_base_atoms
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn get_total_short_base_atoms(&self) -> u64 {
+        self.total_short_base_atoms
+    }
+    pub fn set_perps_params(
+        &mut self,
+        initial_margin_bps: u64,
+        maintenance_margin_bps: u64,
+    ) {
+        self.initial_margin_bps = initial_margin_bps;
+        self.maintenance_margin_bps = maintenance_margin_bps;
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn set_total_long_base_atoms(&mut self, val: u64) {
+        self.total_long_base_atoms = val;
+    }
+    #[cfg(not(feature = "certora"))]
+    pub fn set_total_short_base_atoms(&mut self, val: u64) {
+        self.total_short_base_atoms = val;
+    }
+
+    pub fn get_pyth_feed(&self) -> &Pubkey {
+        &self.pyth_feed_account
+    }
+    pub fn set_pyth_feed(&mut self, feed: Pubkey) {
+        self.pyth_feed_account = feed;
+    }
+    pub fn get_oracle_price_mantissa(&self) -> u64 {
+        self.oracle_price_mantissa
+    }
+    pub fn get_oracle_price_expo(&self) -> i32 {
+        self.oracle_price_expo_and_pad as i32
+    }
+    pub fn set_oracle_price(&mut self, mantissa: u64, expo: i32) {
+        self.oracle_price_mantissa = mantissa;
+        self.oracle_price_expo_and_pad = expo as u32 as u64;
+    }
+    pub fn get_last_funding_timestamp(&self) -> i64 {
+        self.last_funding_timestamp as i64
+    }
+    pub fn set_last_funding_timestamp(&mut self, ts: i64) {
+        self.last_funding_timestamp = ts as u64;
+    }
+    pub fn get_cumulative_funding(&self) -> i64 {
+        self.cumulative_funding as i64
+    }
+    pub fn set_cumulative_funding(&mut self, val: i64) {
+        self.cumulative_funding = val as u64;
+    }
+
+    pub fn get_insurance_fund_balance(&self) -> u64 {
+        self.insurance_fund_balance
+    }
+    pub fn set_insurance_fund_balance(&mut self, val: u64) {
+        self.insurance_fund_balance = val;
+    }
+    pub fn add_to_insurance_fund(&mut self, amount: u64) {
+        self.insurance_fund_balance = self.insurance_fund_balance.saturating_add(amount);
+    }
+    /// Draw from insurance fund, returns the amount actually drawn (capped by balance).
+    pub fn draw_from_insurance_fund(&mut self, amount: u64) -> u64 {
+        let drawn = amount.min(self.insurance_fund_balance);
+        self.insurance_fund_balance = self.insurance_fund_balance.saturating_sub(drawn);
+        drawn
+    }
+    pub fn get_taker_fee_bps(&self) -> u64 {
+        self.taker_fee_bps
+    }
+    pub fn set_taker_fee_bps(&mut self, val: u64) {
+        self.taker_fee_bps = val;
+    }
+    pub fn get_liquidation_buffer_bps(&self) -> u64 {
+        self.liquidation_buffer_bps
+    }
+    pub fn set_liquidation_buffer_bps(&mut self, val: u64) {
+        self.liquidation_buffer_bps = val;
     }
 }
 
@@ -436,9 +604,9 @@ impl<Fixed: DerefOrBorrow<MarketFixed>, Dynamic: DerefOrBorrow<[u8]>>
         }
     }
 
-    pub fn get_base_mint(&self) -> &Pubkey {
+    pub fn get_base_mint_index(&self) -> u8 {
         let DynamicAccount { fixed, .. } = self.borrow_market();
-        fixed.get_base_mint()
+        fixed.get_base_mint_index()
     }
 
     pub fn get_quote_mint(&self) -> &Pubkey {
@@ -737,6 +905,22 @@ impl<Fixed: DerefOrBorrow<MarketFixed>, Dynamic: DerefOrBorrow<[u8]>>
         claimed_seat.quote_volume
     }
 
+    /// Get the trader's perps position: (position_size as i64, quote_cost_basis as u64)
+    pub fn get_trader_position(&self, trader: &Pubkey) -> (i64, u64) {
+        let DynamicAccount { fixed, dynamic } = self.borrow_market();
+
+        let claimed_seats_tree: ClaimedSeatTreeReadOnly =
+            ClaimedSeatTreeReadOnly::new(dynamic, fixed.claimed_seats_root_index, NIL);
+        let trader_index: DataIndex =
+            claimed_seats_tree.lookup_index(&ClaimedSeat::new_empty(*trader));
+        let claimed_seat: &ClaimedSeat = get_helper_seat(dynamic, trader_index).get_value();
+
+        (
+            claimed_seat.get_position_size(),
+            claimed_seat.get_quote_cost_basis(),
+        )
+    }
+
     pub fn get_bids(&self) -> BooksideReadOnly {
         let DynamicAccount { dynamic, fixed } = self.borrow_market();
         BooksideReadOnly::new(
@@ -933,6 +1117,72 @@ impl<
         let DynamicAccount { fixed, dynamic } = self.borrow_mut();
         update_balance(fixed, dynamic, trader_index, is_base, false, amount_atoms)?;
         Ok(())
+    }
+
+    /// Funding rate scaling factor (1e9). Shared with crank_funding.
+    const FUNDING_SCALE: i64 = 1_000_000_000;
+
+    /// Settle accumulated funding for a trader using lazy cumulative approach.
+    ///
+    /// Reads the trader's `last_cumulative_funding` (stored in base_withdrawable_balance),
+    /// computes the funding owed based on position_size and the delta from the global
+    /// cumulative rate, adjusts quote margin, and zeroes base_withdrawable_balance
+    /// (preparing it for the matching engine's virtual base operations).
+    ///
+    /// Must be called at the START of any user interaction (swap, batch_update,
+    /// liquidate, deposit, withdraw) before any base balance operations.
+    pub fn settle_funding_for_trader(&mut self, trader_index: DataIndex) -> ProgramResult {
+        let DynamicAccount { fixed, dynamic } = self.borrow_mut();
+        let claimed_seat: &mut ClaimedSeat =
+            get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+
+        let position_size: i64 = claimed_seat.get_position_size();
+        if position_size != 0 {
+            let global_cumulative: i64 = fixed.get_cumulative_funding();
+            let last_cumulative: i64 = claimed_seat.get_last_cumulative_funding();
+            let delta: i64 = global_cumulative.wrapping_sub(last_cumulative);
+
+            if delta != 0 {
+                // funding_owed = position_size * delta / FUNDING_SCALE
+                // Longs pay positive funding, shorts receive positive funding
+                let funding_owed: i64 = ((position_size as i128 * delta as i128)
+                    / Self::FUNDING_SCALE as i128) as i64;
+
+                let current_margin: u64 = claimed_seat.quote_withdrawable_balance.as_u64();
+                let new_margin: u64 = if funding_owed >= 0 {
+                    let owed: u64 = funding_owed as u64;
+                    if owed <= current_margin {
+                        current_margin - owed
+                    } else {
+                        // Funding exceeds margin — draw deficit from insurance fund.
+                        // This prevents silent vault insolvency.
+                        let deficit: u64 = owed - current_margin;
+                        fixed.draw_from_insurance_fund(deficit);
+                        0
+                    }
+                } else {
+                    current_margin.saturating_add(funding_owed.unsigned_abs())
+                };
+                claimed_seat.quote_withdrawable_balance = QuoteAtoms::new(new_margin);
+            }
+        }
+
+        // Zero base_withdrawable_balance for matching engine (base is virtual in perps).
+        // The cumulative funding value was consumed above.
+        claimed_seat.base_withdrawable_balance = BaseAtoms::new(0);
+        Ok(())
+    }
+
+    /// Store the current global cumulative funding rate into the trader's seat.
+    ///
+    /// Must be called at the END of any user interaction, after all matching
+    /// engine operations are complete, to persist the funding checkpoint.
+    pub fn store_cumulative_for_trader(&mut self, trader_index: DataIndex) {
+        let DynamicAccount { fixed, dynamic } = self.borrow_mut();
+        let global_cumulative: i64 = fixed.get_cumulative_funding();
+        let claimed_seat: &mut ClaimedSeat =
+            get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+        claimed_seat.set_last_cumulative_funding(global_cumulative);
     }
 
     pub fn place_order_(
@@ -1150,18 +1400,19 @@ impl<
             }
 
             // Increase maker from the matched amount in the trade.
-            update_balance(
-                fixed,
-                dynamic,
-                maker_trader_index,
-                !is_bid,
-                true,
-                if is_bid {
-                    quote_atoms_traded.into()
-                } else {
-                    base_atoms_traded.into()
-                },
-            )?;
+            // In perps, only credit quote to maker. Skip base credits since base
+            // is virtual and base_withdrawable_balance stores cumulative funding.
+            // Position tracking is handled by update_perps_position below.
+            if is_bid {
+                update_balance(
+                    fixed,
+                    dynamic,
+                    maker_trader_index,
+                    false, // quote side
+                    true,
+                    quote_atoms_traded.into(),
+                )?;
+            }
             // Decrease taker
             update_balance(
                 fixed,
@@ -1189,15 +1440,29 @@ impl<
                 },
             )?;
 
-            // record maker & taker volume
-            record_volume_by_trader_index(dynamic, maker_trader_index, quote_atoms_traded);
-            record_volume_by_trader_index(dynamic, trader_index, quote_atoms_traded);
+            // Update perps position tracking for maker and taker
+            update_perps_position(
+                fixed,
+                dynamic,
+                maker_trader_index,
+                base_atoms_traded.as_u64(),
+                quote_atoms_traded.as_u64(),
+                !is_bid,
+            )?;
+            update_perps_position(
+                fixed,
+                dynamic,
+                trader_index,
+                base_atoms_traded.as_u64(),
+                quote_atoms_traded.as_u64(),
+                is_bid,
+            )?;
 
             emit_stack(FillLog {
                 market,
                 maker,
                 taker,
-                base_mint: fixed.base_mint,
+                base_mint: Pubkey::default(),
                 quote_mint: fixed.quote_mint,
                 base_atoms: base_atoms_traded,
                 quote_atoms: quote_atoms_traded,
@@ -1336,20 +1601,21 @@ impl<
                         set_payload_order(dynamic, free_address);
                     }
 
-                    update_balance(
-                        fixed,
-                        dynamic,
-                        maker_trader_index,
-                        !is_bid,
-                        false,
-                        if is_bid {
+                    // Reserve tokens for the reverse order.
+                    // In perps, skip base deductions (base is virtual and
+                    // base_withdrawable_balance stores cumulative funding).
+                    if is_bid {
+                        update_balance(
+                            fixed,
+                            dynamic,
+                            maker_trader_index,
+                            false, // quote side (is_bid=true → !is_bid=false)
+                            false,
                             num_base_atoms_reverse
                                 .checked_mul(price_reverse, true)?
-                                .into()
-                        } else {
-                            num_base_atoms_reverse.into()
-                        },
-                    )?;
+                                .into(),
+                        )?;
+                    }
                 }
             }
 
@@ -1595,7 +1861,8 @@ impl<
             // verification does not cause failures.
             #[cfg(feature = "certora")]
             return Ok(());
-        } else {
+        } else if is_bid {
+            // For bids: return quote atoms to the trader's balance.
             update_balance(
                 fixed,
                 dynamic,
@@ -1605,6 +1872,9 @@ impl<
                 amount_atoms,
             )?;
         }
+        // For asks: do NOT return base atoms. Base is virtual in perps,
+        // and base_withdrawable_balance is repurposed for cumulative funding tracking.
+        // The virtual base atoms were meaningless accounting artifacts.
         remove_order_from_tree_and_free(fixed, dynamic, order_index, is_bid)?;
 
         Ok(())
@@ -1781,13 +2051,105 @@ pub fn update_balance(
     Ok(())
 }
 
-fn record_volume_by_trader_index(
+/// Update perps position tracking for a trader after a fill.
+/// `is_bid` means the trader is buying (going long).
+pub fn update_perps_position(
+    fixed: &mut MarketFixed,
     dynamic: &mut [u8],
     trader_index: DataIndex,
-    amount_atoms: QuoteAtoms,
-) {
-    let claimed_seat: &mut ClaimedSeat = get_mut_helper_seat(dynamic, trader_index).get_mut_value();
-    claimed_seat.quote_volume = claimed_seat.quote_volume.wrapping_add(amount_atoms);
+    base_atoms_traded: u64,
+    quote_atoms_traded: u64,
+    is_bid: bool,
+) -> ProgramResult {
+    let claimed_seat: &mut ClaimedSeat =
+        get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+
+    let old_position: i64 = claimed_seat.get_position_size();
+    let old_cost_basis: u64 = claimed_seat.get_quote_cost_basis();
+
+    let new_position: i64 = if is_bid {
+        old_position
+            .checked_add(base_atoms_traded as i64)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+    } else {
+        old_position
+            .checked_sub(base_atoms_traded as i64)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+    };
+
+    // Update cost basis
+    let new_cost_basis: u64 = if old_position == 0 {
+        // Opening fresh position
+        quote_atoms_traded
+    } else if (old_position > 0 && is_bid) || (old_position < 0 && !is_bid) {
+        // Increasing position in same direction
+        old_cost_basis.saturating_add(quote_atoms_traded)
+    } else {
+        // Reducing or flipping position
+        let old_abs: u64 = old_position.unsigned_abs();
+        if base_atoms_traded <= old_abs {
+            // Partial close: proportionally reduce cost basis
+            let closed_cost: u64 = ((old_cost_basis as u128)
+                .checked_mul(base_atoms_traded as u128)
+                .unwrap_or(u128::MAX)
+                / (old_abs as u128)) as u64;
+            old_cost_basis.saturating_sub(closed_cost)
+        } else {
+            // Full close + open in opposite direction
+            let remaining: u64 = base_atoms_traded - old_abs;
+            ((quote_atoms_traded as u128)
+                .checked_mul(remaining as u128)
+                .unwrap_or(u128::MAX)
+                / (base_atoms_traded as u128)) as u64
+        }
+    };
+
+    claimed_seat.set_position_size(new_position);
+    claimed_seat.set_quote_cost_basis(new_cost_basis);
+
+    // Update global position tracking
+    #[cfg(not(feature = "certora"))]
+    {
+        let old_long: u64 = if old_position > 0 {
+            old_position as u64
+        } else {
+            0
+        };
+        let old_short: u64 = if old_position < 0 {
+            old_position.unsigned_abs()
+        } else {
+            0
+        };
+        let new_long: u64 = if new_position > 0 {
+            new_position as u64
+        } else {
+            0
+        };
+        let new_short: u64 = if new_position < 0 {
+            new_position.unsigned_abs()
+        } else {
+            0
+        };
+
+        if new_long != old_long {
+            let current: u64 = fixed.get_total_long_base_atoms();
+            if new_long > old_long {
+                fixed.set_total_long_base_atoms(current.saturating_add(new_long - old_long));
+            } else {
+                fixed.set_total_long_base_atoms(current.saturating_sub(old_long - new_long));
+            }
+        }
+        if new_short != old_short {
+            let current: u64 = fixed.get_total_short_base_atoms();
+            if new_short > old_short {
+                fixed.set_total_short_base_atoms(current.saturating_add(new_short - old_short));
+            } else {
+                fixed.set_total_short_base_atoms(current.saturating_sub(old_short - new_short));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[inline(always)]
@@ -1870,19 +2232,12 @@ fn remove_and_update_balances(
         } else {
             remove_from_global(&global_trade_accounts_opts[0])?;
         }
-    } else {
-        // Return the exact number of atoms if the resting order is an
-        // ask. If the resting order is bid, multiply by price and round
-        // in favor of the taker which here means up. The maker places
-        // the minimum number of atoms required.
-        let amount_atoms_to_return: u64 = if order_to_remove_is_bid {
-            resting_order_to_remove
-                .get_price()
-                .checked_quote_for_base(resting_order_to_remove.get_num_base_atoms(), true)?
-                .as_u64()
-        } else {
-            resting_order_to_remove.get_num_base_atoms().as_u64()
-        };
+    } else if order_to_remove_is_bid {
+        // For bids: return quote atoms to the trader's balance.
+        let amount_atoms_to_return: u64 = resting_order_to_remove
+            .get_price()
+            .checked_quote_for_base(resting_order_to_remove.get_num_base_atoms(), true)?
+            .as_u64();
         update_balance(
             fixed,
             dynamic,
@@ -1892,6 +2247,8 @@ fn remove_and_update_balances(
             amount_atoms_to_return,
         )?;
     }
+    // For asks: do NOT return base atoms. Base is virtual in perps,
+    // and base_withdrawable_balance is repurposed for cumulative funding tracking.
     remove_order_from_tree_and_free(
         fixed,
         dynamic,
@@ -1955,6 +2312,6 @@ pub fn create_empty_market(
             executable: false,
         },
     };
-    let market_fixed: MarketFixed = MarketFixed::new_empty(&base_mint, &quote_mint, market_key);
+    let market_fixed: MarketFixed = MarketFixed::new_empty(0, base_mint.mint.decimals, &quote_mint);
     market_fixed
 }

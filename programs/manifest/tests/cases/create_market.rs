@@ -1,13 +1,5 @@
-use std::cell::RefMut;
-
-use manifest::program::create_market_instructions;
-use solana_program_test::{tokio, ProgramTestContext};
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-    transaction::Transaction,
-};
+use manifest::validation::get_market_address;
+use solana_program_test::tokio;
 
 use crate::TestFixture;
 
@@ -19,62 +11,32 @@ async fn create_market() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn create_market_fail_same_base_and_quote() -> anyhow::Result<()> {
+async fn create_market_fail_already_initialized() -> anyhow::Result<()> {
     let test_fixture: TestFixture = TestFixture::new().await;
 
+    // The default TestFixture already created a market with index 0 + usdc.
+    // Trying to create the same pair again should fail because the PDA already exists.
     assert!(test_fixture
         .create_new_market(
-            &test_fixture.sol_mint_fixture.key,
-            &test_fixture.sol_mint_fixture.key
+            0,
+            9,
+            &test_fixture.usdc_mint_fixture.key,
         )
         .await
         .is_err());
+
     Ok(())
 }
 
 #[tokio::test]
-async fn create_market_fail_already_initialized() -> anyhow::Result<()> {
+async fn create_market_pda_address() -> anyhow::Result<()> {
     let test_fixture: TestFixture = TestFixture::new().await;
 
-    let mut context_cell: RefMut<ProgramTestContext> = test_fixture.context.borrow_mut();
-    let market_keypair: Keypair = Keypair::new();
-    let payer: &Pubkey = &context_cell.payer.pubkey();
-    let create_market_ixs: Vec<Instruction> = create_market_instructions(
-        &market_keypair.pubkey(),
-        &test_fixture.sol_mint_fixture.key,
+    let (expected_market_key, _) = get_market_address(
+        0, // base_mint_index used in TestFixture::new
         &test_fixture.usdc_mint_fixture.key,
-        payer,
-    )
-    .unwrap();
-
-    let create_market_tx: Transaction = {
-        Transaction::new_signed_with_payer(
-            &create_market_ixs[..],
-            Some(payer),
-            &[&context_cell.payer, &market_keypair],
-            context_cell.last_blockhash,
-        )
-    };
-    context_cell
-        .banks_client
-        .process_transaction(create_market_tx)
-        .await?;
-
-    // Should fail the second time because already initialized. This is testing
-    // failing in the program, so dont init market outside the program again.
-    let create_market_tx: Transaction = {
-        Transaction::new_signed_with_payer(
-            &create_market_ixs[1..],
-            Some(payer),
-            &[&context_cell.payer],
-            context_cell.last_blockhash,
-        )
-    };
-    assert!(context_cell
-        .banks_client
-        .process_transaction(create_market_tx)
-        .await
-        .is_err());
+    );
+    assert_eq!(test_fixture.market_fixture.key, expected_market_key);
 
     Ok(())
 }

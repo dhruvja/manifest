@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link DepositLog}
@@ -15,11 +15,11 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type DepositLogArgs = {
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-  mint: web3.PublicKey;
-  amountAtoms: beet.bignum;
-};
+  market: web3.PublicKey
+  trader: web3.PublicKey
+  mint: web3.PublicKey
+  amountAtoms: beet.bignum
+}
 /**
  * Holds the data for the {@link DepositLog} Account and provides de/serialization
  * functionality for that data
@@ -32,19 +32,14 @@ export class DepositLog implements DepositLogArgs {
     readonly market: web3.PublicKey,
     readonly trader: web3.PublicKey,
     readonly mint: web3.PublicKey,
-    readonly amountAtoms: beet.bignum,
+    readonly amountAtoms: beet.bignum
   ) {}
 
   /**
    * Creates a {@link DepositLog} instance from the provided args.
    */
   static fromArgs(args: DepositLogArgs) {
-    return new DepositLog(
-      args.market,
-      args.trader,
-      args.mint,
-      args.amountAtoms,
-    );
+    return new DepositLog(args.market, args.trader, args.mint, args.amountAtoms)
   }
 
   /**
@@ -53,9 +48,9 @@ export class DepositLog implements DepositLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [DepositLog, number] {
-    return DepositLog.deserialize(accountInfo.data, offset);
+    return DepositLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -67,16 +62,16 @@ export class DepositLog implements DepositLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<DepositLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find DepositLog account at ${address}`);
+      throw new Error(`Unable to find DepositLog account at ${address}`)
     }
-    return DepositLog.fromAccountInfo(accountInfo, 0)[0];
+    return DepositLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -87,10 +82,10 @@ export class DepositLog implements DepositLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, depositLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, depositLogBeet)
   }
 
   /**
@@ -98,7 +93,7 @@ export class DepositLog implements DepositLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [DepositLog, number] {
-    return depositLogBeet.deserialize(buf, offset);
+    return depositLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -106,7 +101,7 @@ export class DepositLog implements DepositLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return depositLogBeet.serialize(this);
+    return depositLogBeet.serialize(this)
   }
 
   /**
@@ -114,7 +109,7 @@ export class DepositLog implements DepositLogArgs {
    * {@link DepositLog}
    */
   static get byteSize() {
-    return depositLogBeet.byteSize;
+    return depositLogBeet.byteSize
   }
 
   /**
@@ -125,12 +120,12 @@ export class DepositLog implements DepositLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       DepositLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -138,7 +133,7 @@ export class DepositLog implements DepositLogArgs {
    * hold {@link DepositLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === DepositLog.byteSize;
+    return buf.byteLength - offset === DepositLog.byteSize
   }
 
   /**
@@ -151,17 +146,17 @@ export class DepositLog implements DepositLogArgs {
       trader: this.trader.toBase58(),
       mint: this.mint.toBase58(),
       amountAtoms: (() => {
-        const x = <{ toNumber: () => number }>this.amountAtoms;
+        const x = <{ toNumber: () => number }>this.amountAtoms
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -177,5 +172,5 @@ export const depositLogBeet = new beet.BeetStruct<DepositLog, DepositLogArgs>(
     ['amountAtoms', beet.u64],
   ],
   DepositLog.fromArgs,
-  'DepositLog',
-);
+  'DepositLog'
+)

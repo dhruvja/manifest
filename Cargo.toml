@@ -7,6 +7,7 @@ members = [
   "programs/manifest",
   "programs/wrapper",
   "programs/ui-wrapper",
+  "cli",
 ]
 
 [workspace.dependencies]
@@ -37,6 +38,7 @@ solana_cvt = { git = "https://github.com/Certora/solana-cvt", branch = "solana-v
 hook_macro = { git = "https://github.com/Certora/solana-cvt", branch = "solana-v2.2" }
 vectors = { git = "https://github.com/Certora/solana-cvt", branch = "solana-v2.2" }
 arrayref = "0.3.7"
+ephemeral-rollups-sdk = "0.8.5"
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]

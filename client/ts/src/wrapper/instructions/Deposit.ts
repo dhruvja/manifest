@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   WrapperDepositParams,
   wrapperDepositParamsBeet,
-} from '../types/WrapperDepositParams';
+} from '../types/WrapperDepositParams'
 
 /**
  * @category Instructions
@@ -19,8 +19,8 @@ import {
  * @category generated
  */
 export type DepositInstructionArgs = {
-  params: WrapperDepositParams;
-};
+  params: WrapperDepositParams
+}
 /**
  * @category Instructions
  * @category Deposit
@@ -28,15 +28,15 @@ export type DepositInstructionArgs = {
  */
 export const DepositStruct = new beet.BeetArgsStruct<
   DepositInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', wrapperDepositParamsBeet],
   ],
-  'DepositInstructionArgs',
-);
+  'DepositInstructionArgs'
+)
 /**
  * Accounts required by the _Deposit_ instruction
  *
@@ -52,17 +52,17 @@ export const DepositStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type DepositInstructionAccounts = {
-  manifestProgram: web3.PublicKey;
-  owner: web3.PublicKey;
-  market: web3.PublicKey;
-  traderTokenAccount: web3.PublicKey;
-  vault: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-  wrapperState: web3.PublicKey;
-  mint: web3.PublicKey;
-};
+  manifestProgram: web3.PublicKey
+  owner: web3.PublicKey
+  market: web3.PublicKey
+  traderTokenAccount: web3.PublicKey
+  vault: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+  wrapperState: web3.PublicKey
+  mint: web3.PublicKey
+}
 
-export const depositInstructionDiscriminator = 2;
+export const depositInstructionDiscriminator = 2
 
 /**
  * Creates a _Deposit_ instruction.
@@ -77,12 +77,12 @@ export const depositInstructionDiscriminator = 2;
 export function createDepositInstruction(
   accounts: DepositInstructionAccounts,
   args: DepositInstructionArgs,
-  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL'),
+  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL')
 ) {
   const [data] = DepositStruct.serialize({
     instructionDiscriminator: depositInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.manifestProgram,
@@ -124,12 +124,12 @@ export function createDepositInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

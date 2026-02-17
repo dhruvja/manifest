@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link WithdrawLog}
@@ -15,11 +15,11 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type WithdrawLogArgs = {
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-  mint: web3.PublicKey;
-  amountAtoms: beet.bignum;
-};
+  market: web3.PublicKey
+  trader: web3.PublicKey
+  mint: web3.PublicKey
+  amountAtoms: beet.bignum
+}
 /**
  * Holds the data for the {@link WithdrawLog} Account and provides de/serialization
  * functionality for that data
@@ -32,7 +32,7 @@ export class WithdrawLog implements WithdrawLogArgs {
     readonly market: web3.PublicKey,
     readonly trader: web3.PublicKey,
     readonly mint: web3.PublicKey,
-    readonly amountAtoms: beet.bignum,
+    readonly amountAtoms: beet.bignum
   ) {}
 
   /**
@@ -43,8 +43,8 @@ export class WithdrawLog implements WithdrawLogArgs {
       args.market,
       args.trader,
       args.mint,
-      args.amountAtoms,
-    );
+      args.amountAtoms
+    )
   }
 
   /**
@@ -53,9 +53,9 @@ export class WithdrawLog implements WithdrawLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [WithdrawLog, number] {
-    return WithdrawLog.deserialize(accountInfo.data, offset);
+    return WithdrawLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -67,16 +67,16 @@ export class WithdrawLog implements WithdrawLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<WithdrawLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find WithdrawLog account at ${address}`);
+      throw new Error(`Unable to find WithdrawLog account at ${address}`)
     }
-    return WithdrawLog.fromAccountInfo(accountInfo, 0)[0];
+    return WithdrawLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -87,10 +87,10 @@ export class WithdrawLog implements WithdrawLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, withdrawLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, withdrawLogBeet)
   }
 
   /**
@@ -98,7 +98,7 @@ export class WithdrawLog implements WithdrawLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [WithdrawLog, number] {
-    return withdrawLogBeet.deserialize(buf, offset);
+    return withdrawLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -106,7 +106,7 @@ export class WithdrawLog implements WithdrawLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return withdrawLogBeet.serialize(this);
+    return withdrawLogBeet.serialize(this)
   }
 
   /**
@@ -114,7 +114,7 @@ export class WithdrawLog implements WithdrawLogArgs {
    * {@link WithdrawLog}
    */
   static get byteSize() {
-    return withdrawLogBeet.byteSize;
+    return withdrawLogBeet.byteSize
   }
 
   /**
@@ -125,12 +125,12 @@ export class WithdrawLog implements WithdrawLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       WithdrawLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -138,7 +138,7 @@ export class WithdrawLog implements WithdrawLogArgs {
    * hold {@link WithdrawLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === WithdrawLog.byteSize;
+    return buf.byteLength - offset === WithdrawLog.byteSize
   }
 
   /**
@@ -151,17 +151,17 @@ export class WithdrawLog implements WithdrawLogArgs {
       trader: this.trader.toBase58(),
       mint: this.mint.toBase58(),
       amountAtoms: (() => {
-        const x = <{ toNumber: () => number }>this.amountAtoms;
+        const x = <{ toNumber: () => number }>this.amountAtoms
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -180,5 +180,5 @@ export const withdrawLogBeet = new beet.BeetStruct<
     ['amountAtoms', beet.u64],
   ],
   WithdrawLog.fromArgs,
-  'WithdrawLog',
-);
+  'WithdrawLog'
+)

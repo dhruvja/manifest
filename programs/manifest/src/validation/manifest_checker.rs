@@ -37,6 +37,23 @@ impl<'a, 'info, T: ManifestAccount + Get + Clone> ManifestAccountInfo<'a, 'info,
         })
     }
 
+    /// Load a ManifestAccountInfo without verifying program ownership.
+    /// Used for accounts that are delegated to MagicBlock ephemeral rollups,
+    /// where the owner changes to the delegation program.
+    pub fn new_delegated(
+        info: &'a AccountInfo<'info>,
+    ) -> Result<ManifestAccountInfo<'a, 'info, T>, ProgramError> {
+        let bytes: Ref<&mut [u8]> = info.try_borrow_data()?;
+        let (header_bytes, _) = bytes.split_at(size_of::<T>());
+        let header: &T = get_helper::<T>(header_bytes, 0_u32);
+        header.verify_discriminant()?;
+
+        Ok(Self {
+            info,
+            phantom: std::marker::PhantomData,
+        })
+    }
+
     pub fn new_init(
         info: &'a AccountInfo<'info>,
     ) -> Result<ManifestAccountInfo<'a, 'info, T>, ProgramError> {
@@ -136,4 +153,21 @@ macro_rules! global_seeds_with_bump {
 
 pub fn get_global_address(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(global_seeds!(mint), &crate::ID)
+}
+
+macro_rules! market_seeds {
+    ( $base_mint_index:expr, $quote_mint:expr ) => {
+        &[b"market", &[$base_mint_index], $quote_mint.as_ref()]
+    };
+}
+
+#[macro_export]
+macro_rules! market_seeds_with_bump {
+    ( $base_mint_index:expr, $quote_mint:expr, $bump:expr ) => {
+        &[&[b"market", &[$base_mint_index], $quote_mint.as_ref(), &[$bump]]]
+    };
+}
+
+pub fn get_market_address(base_mint_index: u8, quote_mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(market_seeds!(base_mint_index, quote_mint), &crate::ID)
 }

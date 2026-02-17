@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
@@ -15,8 +15,8 @@ import * as web3 from '@solana/web3.js';
  * @category generated
  */
 export const CreateMarketStruct = new beet.BeetArgsStruct<{
-  instructionDiscriminator: number;
-}>([['instructionDiscriminator', beet.u8]], 'CreateMarketInstructionArgs');
+  instructionDiscriminator: number
+}>([['instructionDiscriminator', beet.u8]], 'CreateMarketInstructionArgs')
 /**
  * Accounts required by the _CreateMarket_ instruction
  *
@@ -32,18 +32,18 @@ export const CreateMarketStruct = new beet.BeetArgsStruct<{
  * @category generated
  */
 export type CreateMarketInstructionAccounts = {
-  payer: web3.PublicKey;
-  market: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  baseMint: web3.PublicKey;
-  quoteMint: web3.PublicKey;
-  baseVault: web3.PublicKey;
-  quoteVault: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-  tokenProgram22: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  market: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  baseMint: web3.PublicKey
+  quoteMint: web3.PublicKey
+  baseVault: web3.PublicKey
+  quoteVault: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+  tokenProgram22: web3.PublicKey
+}
 
-export const createMarketInstructionDiscriminator = 0;
+export const createMarketInstructionDiscriminator = 0
 
 /**
  * Creates a _CreateMarket_ instruction.
@@ -55,11 +55,11 @@ export const createMarketInstructionDiscriminator = 0;
  */
 export function createCreateMarketInstruction(
   accounts: CreateMarketInstructionAccounts,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = CreateMarketStruct.serialize({
     instructionDiscriminator: createMarketInstructionDiscriminator,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -106,12 +106,12 @@ export function createCreateMarketInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

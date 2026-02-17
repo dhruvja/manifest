@@ -5,8 +5,8 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
@@ -14,8 +14,8 @@ import * as web3 from '@solana/web3.js';
  * @category generated
  */
 export const ClaimSeatStruct = new beet.BeetArgsStruct<{
-  instructionDiscriminator: number;
-}>([['instructionDiscriminator', beet.u8]], 'ClaimSeatInstructionArgs');
+  instructionDiscriminator: number
+}>([['instructionDiscriminator', beet.u8]], 'ClaimSeatInstructionArgs')
 /**
  * Accounts required by the _ClaimSeat_ instruction
  *
@@ -28,14 +28,14 @@ export const ClaimSeatStruct = new beet.BeetArgsStruct<{
  * @category generated
  */
 export type ClaimSeatInstructionAccounts = {
-  manifestProgram: web3.PublicKey;
-  owner: web3.PublicKey;
-  market: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  wrapperState: web3.PublicKey;
-};
+  manifestProgram: web3.PublicKey
+  owner: web3.PublicKey
+  market: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  wrapperState: web3.PublicKey
+}
 
-export const claimSeatInstructionDiscriminator = 1;
+export const claimSeatInstructionDiscriminator = 1
 
 /**
  * Creates a _ClaimSeat_ instruction.
@@ -47,11 +47,11 @@ export const claimSeatInstructionDiscriminator = 1;
  */
 export function createClaimSeatInstruction(
   accounts: ClaimSeatInstructionAccounts,
-  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL'),
+  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL')
 ) {
   const [data] = ClaimSeatStruct.serialize({
     instructionDiscriminator: claimSeatInstructionDiscriminator,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.manifestProgram,
@@ -78,12 +78,12 @@ export function createClaimSeatInstruction(
       isWritable: true,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

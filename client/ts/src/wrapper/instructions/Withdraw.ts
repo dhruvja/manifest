@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   WrapperWithdrawParams,
   wrapperWithdrawParamsBeet,
-} from '../types/WrapperWithdrawParams';
+} from '../types/WrapperWithdrawParams'
 
 /**
  * @category Instructions
@@ -19,8 +19,8 @@ import {
  * @category generated
  */
 export type WithdrawInstructionArgs = {
-  params: WrapperWithdrawParams;
-};
+  params: WrapperWithdrawParams
+}
 /**
  * @category Instructions
  * @category Withdraw
@@ -28,15 +28,15 @@ export type WithdrawInstructionArgs = {
  */
 export const WithdrawStruct = new beet.BeetArgsStruct<
   WithdrawInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', wrapperWithdrawParamsBeet],
   ],
-  'WithdrawInstructionArgs',
-);
+  'WithdrawInstructionArgs'
+)
 /**
  * Accounts required by the _Withdraw_ instruction
  *
@@ -52,17 +52,17 @@ export const WithdrawStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type WithdrawInstructionAccounts = {
-  manifestProgram: web3.PublicKey;
-  owner: web3.PublicKey;
-  market: web3.PublicKey;
-  traderTokenAccount: web3.PublicKey;
-  vault: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-  wrapperState: web3.PublicKey;
-  mint: web3.PublicKey;
-};
+  manifestProgram: web3.PublicKey
+  owner: web3.PublicKey
+  market: web3.PublicKey
+  traderTokenAccount: web3.PublicKey
+  vault: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+  wrapperState: web3.PublicKey
+  mint: web3.PublicKey
+}
 
-export const withdrawInstructionDiscriminator = 3;
+export const withdrawInstructionDiscriminator = 3
 
 /**
  * Creates a _Withdraw_ instruction.
@@ -77,12 +77,12 @@ export const withdrawInstructionDiscriminator = 3;
 export function createWithdrawInstruction(
   accounts: WithdrawInstructionAccounts,
   args: WithdrawInstructionArgs,
-  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL'),
+  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL')
 ) {
   const [data] = WithdrawStruct.serialize({
     instructionDiscriminator: withdrawInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.manifestProgram,
@@ -124,12 +124,12 @@ export function createWithdrawInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

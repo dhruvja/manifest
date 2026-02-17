@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
-import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
+import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms'
 
 /**
  * Arguments used to create {@link GlobalWithdrawLog}
@@ -16,10 +16,10 @@ import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
  * @category generated
  */
 export type GlobalWithdrawLogArgs = {
-  global: web3.PublicKey;
-  trader: web3.PublicKey;
-  globalAtoms: GlobalAtoms;
-};
+  global: web3.PublicKey
+  trader: web3.PublicKey
+  globalAtoms: GlobalAtoms
+}
 /**
  * Holds the data for the {@link GlobalWithdrawLog} Account and provides de/serialization
  * functionality for that data
@@ -31,14 +31,14 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
   private constructor(
     readonly global: web3.PublicKey,
     readonly trader: web3.PublicKey,
-    readonly globalAtoms: GlobalAtoms,
+    readonly globalAtoms: GlobalAtoms
   ) {}
 
   /**
    * Creates a {@link GlobalWithdrawLog} instance from the provided args.
    */
   static fromArgs(args: GlobalWithdrawLogArgs) {
-    return new GlobalWithdrawLog(args.global, args.trader, args.globalAtoms);
+    return new GlobalWithdrawLog(args.global, args.trader, args.globalAtoms)
   }
 
   /**
@@ -47,9 +47,9 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalWithdrawLog, number] {
-    return GlobalWithdrawLog.deserialize(accountInfo.data, offset);
+    return GlobalWithdrawLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -61,16 +61,16 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalWithdrawLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find GlobalWithdrawLog account at ${address}`);
+      throw new Error(`Unable to find GlobalWithdrawLog account at ${address}`)
     }
-    return GlobalWithdrawLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalWithdrawLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -81,10 +81,10 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalWithdrawLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalWithdrawLogBeet)
   }
 
   /**
@@ -92,7 +92,7 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalWithdrawLog, number] {
-    return globalWithdrawLogBeet.deserialize(buf, offset);
+    return globalWithdrawLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -100,7 +100,7 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalWithdrawLogBeet.serialize(this);
+    return globalWithdrawLogBeet.serialize(this)
   }
 
   /**
@@ -108,7 +108,7 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    * {@link GlobalWithdrawLog}
    */
   static get byteSize() {
-    return globalWithdrawLogBeet.byteSize;
+    return globalWithdrawLogBeet.byteSize
   }
 
   /**
@@ -119,12 +119,12 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalWithdrawLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -132,7 +132,7 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
    * hold {@link GlobalWithdrawLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalWithdrawLog.byteSize;
+    return buf.byteLength - offset === GlobalWithdrawLog.byteSize
   }
 
   /**
@@ -144,7 +144,7 @@ export class GlobalWithdrawLog implements GlobalWithdrawLogArgs {
       global: this.global.toBase58(),
       trader: this.trader.toBase58(),
       globalAtoms: this.globalAtoms,
-    };
+    }
   }
 }
 
@@ -162,5 +162,5 @@ export const globalWithdrawLogBeet = new beet.BeetStruct<
     ['globalAtoms', globalAtomsBeet],
   ],
   GlobalWithdrawLog.fromArgs,
-  'GlobalWithdrawLog',
-);
+  'GlobalWithdrawLog'
+)

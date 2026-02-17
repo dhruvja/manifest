@@ -48,6 +48,20 @@ pub enum ManifestError {
     InvalidEvict = 20,
     #[error("Tried to clean order that was not eligible to be cleaned")]
     InvalidClean = 21,
+    #[error("Invalid MagicBlock program ID")]
+    InvalidMagicProgramId = 22,
+    #[error("Invalid MagicBlock context ID")]
+    InvalidMagicContextId = 23,
+    #[error("Market pubkey does not match expected PDA")]
+    InvalidMarketPubkey = 24,
+    #[error("Insufficient margin for perps position")]
+    InsufficientMargin = 25,
+    #[error("Invalid operation for perps market")]
+    InvalidPerpsOperation = 26,
+    #[error("Trader position is not liquidatable")]
+    NotLiquidatable = 27,
+    #[error("Perps markets only support quote (USDC) operations")]
+    PerpsOnlyQuote = 28,
 }
 
 impl From<ManifestError> for ProgramError {

@@ -20,7 +20,7 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
-use super::{expand_market_if_needed, shared::get_mut_dynamic_account};
+use super::shared::get_mut_dynamic_account;
 
 use crate::validation::loaders::GlobalTradeAccounts;
 #[cfg(feature = "certora")]
@@ -241,6 +241,10 @@ pub(crate) fn process_batch_update_core(
         let trader_index: DataIndex =
             get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
 
+        // Lazy funding settlement: settle accumulated funding and zero base_balance
+        // before any cancel or place operations.
+        dynamic_account.settle_funding_for_trader(trader_index)?;
+
         for cancel_order_params in cancels {
             // Hinted is preferred because that is O(1) to find and O(log n) to
             // remove. Without the hint, we lookup by order_sequence_number and
@@ -322,9 +326,22 @@ pub(crate) fn process_batch_update_core(
             let order_type: OrderType = place_order_params.order_type();
             let last_valid_slot: u32 = place_order_params.last_valid_slot();
 
-            // Need to reborrow every iteration so we can borrow later for expanding.
             let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
             let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
+
+            // Require a free block before each order placement — cannot expand here
+            // since realloc fails while delegated to ER. Call Expand separately.
+            require!(
+                dynamic_account.has_free_block(),
+                crate::program::ManifestError::InvalidFreeList,
+                "No free block available. Call Expand before BatchUpdate.",
+            )?;
+
+            // For asks: virtually credit base atoms so the engine can
+            // reserve them for the resting order. Base is virtual.
+            if !place_order_params.is_bid() {
+                dynamic_account.deposit(trader_index, place_order_params.base_atoms(), true)?;
+            }
 
             let add_order_to_market_result: AddOrderToMarketResult = batch_place_order(
                 &mut dynamic_account,
@@ -344,8 +361,73 @@ pub(crate) fn process_batch_update_core(
             let AddOrderToMarketResult {
                 order_index,
                 order_sequence_number,
+                quote_atoms_traded,
                 ..
             } = add_order_to_market_result;
+
+            // Collect taker fee into insurance fund
+            #[cfg(not(feature = "certora"))]
+            {
+                let taker_fee_bps: u64 = dynamic_account.fixed.get_taker_fee_bps();
+                if taker_fee_bps > 0 && quote_atoms_traded.as_u64() > 0 {
+                    let fee_amount: u64 = quote_atoms_traded
+                        .as_u64()
+                        .checked_mul(taker_fee_bps)
+                        .unwrap_or(0)
+                        / 10000;
+                    if fee_amount > 0 {
+                        dynamic_account.withdraw(trader_index, fee_amount, false)?;
+                        dynamic_account.fixed.add_to_insurance_fund(fee_amount);
+                    }
+                }
+            }
+
+            // Initial margin check after order placement
+            #[cfg(not(feature = "certora"))]
+            {
+                let claimed_seat: &crate::state::claimed_seat::ClaimedSeat =
+                    get_helper::<hypertree::RBNode<crate::state::claimed_seat::ClaimedSeat>>(
+                        &dynamic_account.dynamic,
+                        trader_index,
+                    )
+                    .get_value();
+                let position_size: i64 = claimed_seat.get_position_size();
+                if position_size != 0 {
+                    let abs_position: u64 = position_size.unsigned_abs();
+                    let mark_price =
+                        super::liquidate::compute_mark_price(&dynamic_account)?;
+                    let notional: u64 = mark_price
+                        .checked_quote_for_base(
+                            crate::quantities::BaseAtoms::new(abs_position),
+                            false,
+                        )?
+                        .as_u64();
+                    let initial_margin_bps: u64 =
+                        dynamic_account.fixed.get_initial_margin_bps();
+                    let required_margin: u64 = notional
+                        .checked_mul(initial_margin_bps)
+                        .unwrap_or(u64::MAX)
+                        / 10000;
+
+                    let cost_basis = claimed_seat.get_quote_cost_basis();
+                    // Use i128 to avoid overflow on large u64 values cast to i64
+                    let unrealized_pnl: i128 = if position_size > 0 {
+                        (notional as i128) - (cost_basis as i128)
+                    } else {
+                        (cost_basis as i128) - (notional as i128)
+                    };
+
+                    let margin: u64 = claimed_seat.quote_withdrawable_balance.as_u64();
+                    let equity: i128 = (margin as i128) + unrealized_pnl;
+                    crate::require!(
+                        equity >= required_margin as i128,
+                        crate::program::ManifestError::InsufficientMargin,
+                        "Initial margin check failed: equity {} < required {}",
+                        equity,
+                        required_margin,
+                    )?;
+                }
+            }
 
             emit_stack(PlaceOrderLog {
                 market: *market.key,
@@ -361,7 +443,13 @@ pub(crate) fn process_batch_update_core(
             })?;
             result.push((order_sequence_number, order_index));
         }
-        expand_market_if_needed(&payer, &market)?;
+    }
+
+    // Store current global cumulative funding checkpoint for lazy settlement.
+    {
+        let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
+        let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
+        dynamic_account.store_cumulative_for_trader(trader_index);
     }
 
     // Formal verification does not cover return values.

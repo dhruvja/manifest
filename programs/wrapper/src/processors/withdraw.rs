@@ -50,15 +50,10 @@ pub(crate) fn process_withdraw(
     let mint_account_info: MintAccountInfo =
         MintAccountInfo::new(next_account_info(account_iter)?)?;
 
+    // Perps: only quote (USDC) withdrawals allowed
     let mint: Pubkey = {
         let market_fixed: Ref<MarketFixed> = market.get_fixed()?;
-        let base_mint: &Pubkey = market_fixed.get_base_mint();
-        let quote_mint: &Pubkey = market_fixed.get_quote_mint();
-        if &trader_token_account.try_borrow_data()?[0..32] == base_mint.as_ref() {
-            *base_mint
-        } else {
-            *quote_mint
-        }
+        *market_fixed.get_quote_mint()
     };
 
     // Params are a direct pass through.

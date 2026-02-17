@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
 
 /**
  * Arguments used to create {@link GlobalClaimSeatLog}
@@ -15,10 +15,10 @@ import * as beet from '@metaplex-foundation/beet';
  * @category generated
  */
 export type GlobalClaimSeatLogArgs = {
-  global: web3.PublicKey;
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-};
+  global: web3.PublicKey
+  market: web3.PublicKey
+  trader: web3.PublicKey
+}
 /**
  * Holds the data for the {@link GlobalClaimSeatLog} Account and provides de/serialization
  * functionality for that data
@@ -30,14 +30,14 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
   private constructor(
     readonly global: web3.PublicKey,
     readonly market: web3.PublicKey,
-    readonly trader: web3.PublicKey,
+    readonly trader: web3.PublicKey
   ) {}
 
   /**
    * Creates a {@link GlobalClaimSeatLog} instance from the provided args.
    */
   static fromArgs(args: GlobalClaimSeatLogArgs) {
-    return new GlobalClaimSeatLog(args.global, args.market, args.trader);
+    return new GlobalClaimSeatLog(args.global, args.market, args.trader)
   }
 
   /**
@@ -46,9 +46,9 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalClaimSeatLog, number] {
-    return GlobalClaimSeatLog.deserialize(accountInfo.data, offset);
+    return GlobalClaimSeatLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -60,18 +60,16 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalClaimSeatLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(
-        `Unable to find GlobalClaimSeatLog account at ${address}`,
-      );
+      throw new Error(`Unable to find GlobalClaimSeatLog account at ${address}`)
     }
-    return GlobalClaimSeatLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalClaimSeatLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -82,10 +80,10 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalClaimSeatLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalClaimSeatLogBeet)
   }
 
   /**
@@ -93,7 +91,7 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalClaimSeatLog, number] {
-    return globalClaimSeatLogBeet.deserialize(buf, offset);
+    return globalClaimSeatLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -101,7 +99,7 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalClaimSeatLogBeet.serialize(this);
+    return globalClaimSeatLogBeet.serialize(this)
   }
 
   /**
@@ -109,7 +107,7 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    * {@link GlobalClaimSeatLog}
    */
   static get byteSize() {
-    return globalClaimSeatLogBeet.byteSize;
+    return globalClaimSeatLogBeet.byteSize
   }
 
   /**
@@ -120,12 +118,12 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalClaimSeatLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -133,7 +131,7 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
    * hold {@link GlobalClaimSeatLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalClaimSeatLog.byteSize;
+    return buf.byteLength - offset === GlobalClaimSeatLog.byteSize
   }
 
   /**
@@ -145,7 +143,7 @@ export class GlobalClaimSeatLog implements GlobalClaimSeatLogArgs {
       global: this.global.toBase58(),
       market: this.market.toBase58(),
       trader: this.trader.toBase58(),
-    };
+    }
   }
 }
 
@@ -163,5 +161,5 @@ export const globalClaimSeatLogBeet = new beet.BeetStruct<
     ['trader', beetSolana.publicKey],
   ],
   GlobalClaimSeatLog.fromArgs,
-  'GlobalClaimSeatLog',
-);
+  'GlobalClaimSeatLog'
+)

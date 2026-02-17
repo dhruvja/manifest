@@ -181,6 +181,34 @@ pub struct GlobalCleanupLog {
     pub amount_deposited: GlobalAtoms,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable, Pod, ShankAccount)]
+pub struct LiquidateLog {
+    pub market: Pubkey,
+    pub liquidator: Pubkey,
+    pub trader: Pubkey,
+    /// Original position size (abs value)
+    pub position_size: u64,
+    /// Mark price used for settlement (quote atoms for full position)
+    pub settlement_price: u64,
+    /// PnL on closed portion as i64 (positive = profit, negative = loss)
+    pub pnl: u64,
+    /// Amount of position closed (base atoms). Equals position_size for full liquidation.
+    pub close_amount: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable, Pod, ShankAccount)]
+pub struct FundingCrankLog {
+    pub market: Pubkey,
+    pub cranker: Pubkey,
+    pub oracle_price: u64,
+    /// Funding rate as i64 (positive = longs pay shorts)
+    pub funding_rate: u64,
+    pub timestamp: u64,
+    pub _padding: [u8; 8],
+}
+
 pub trait Discriminant {
     fn discriminant() -> [u8; 8];
 }
@@ -218,6 +246,8 @@ const GLOBAL_DEPOSIT_LOG_DISCRIMINANT: [u8; 8] = [16, 26, 72, 1, 145, 232, 182, 
 const GLOBAL_WITHDRAW_LOG_DISCRIMINANT: [u8; 8] = [206, 118, 67, 64, 124, 109, 157, 201];
 const GLOBAL_EVICT_LOG_DISCRIMINANT: [u8; 8] = [250, 180, 155, 38, 98, 223, 82, 223];
 const GLOBAL_CLEANUP_LOG_DISCRIMINANT: [u8; 8] = [193, 249, 115, 186, 42, 126, 196, 82];
+const LIQUIDATE_LOG_DISCRIMINANT: [u8; 8] = [232, 126, 161, 135, 147, 57, 82, 153];
+const FUNDING_CRANK_LOG_DISCRIMINANT: [u8; 8] = [56, 41, 215, 141, 163, 216, 83, 84];
 
 discriminant!(
     CreateMarketLog,
@@ -281,4 +311,14 @@ discriminant!(
     GlobalCleanupLog,
     GLOBAL_CLEANUP_LOG_DISCRIMINANT,
     test_global_cleanup_log
+);
+discriminant!(
+    LiquidateLog,
+    LIQUIDATE_LOG_DISCRIMINANT,
+    test_liquidate_log
+);
+discriminant!(
+    FundingCrankLog,
+    FUNDING_CRANK_LOG_DISCRIMINANT,
+    test_funding_crank_log
 );

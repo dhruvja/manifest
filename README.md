@@ -83,6 +83,26 @@ Global orders are a new type of order for trading on Solana. When resting orders
 
 Reverse orders are a special type of order available on Manifest designed to replicate the replacement mechanism inherent in Automated Market Makers (AMMs). These are limit orders that automatically switch sides when filled - buys convert to sells, and sells convert to buys using all the proceeds from the prior fill on the new order. These orders also allow configurable spreads, making them a more customizable version of AMMs. This enables users to have various fixed fees across a series of orders. By utilizing a series of reverse orders, users can fully replicate a concentrated liquidity AMM position. Orderbook liquidity providers benefit from reduced gas costs, as there’s no need to replace orders after they are filled. Therefore, reverse orders are permanent discretized liquidity directly on the orderbook. Similar to AMMs, reverse orders on Manifest make on-chain orderbook market making more accessible for everyone.
 
+### MagicBlock Ephemeral Rollups Integration
+
+Manifest integrates with [MagicBlock's Ephemeral Rollups](https://docs.magicblock.gg/) to enable sub-50ms order matching latency. The key changes are:
+
+- **PDA-based Markets**: Markets are now derived as PDAs with seeds `[b"market", base_mint, quote_mint]`, which is a prerequisite for account delegation.
+- **Account Delegation**: A new `DelegateMarket` instruction (discriminant 14) allows delegating a market account to MagicBlock's ephemeral rollup for high-speed off-chain execution.
+- **Commit Back**: A new `CommitMarket` instruction (discriminant 15) commits the delegated market state back to Solana mainnet.
+- **Delegated Account Support**: All market-touching loaders support a `new_delegated()` fallback that skips program ownership checks, since delegated accounts are temporarily owned by the MagicBlock delegation program.
+
+#### New Instructions
+
+| Instruction | Discriminant | Description |
+|---|---|---|
+| DelegateMarket | 14 | Delegates market PDA to MagicBlock ephemeral rollup |
+| CommitMarket | 15 | Commits delegated market state back to mainnet |
+
+#### Dependencies
+
+- `ephemeral-rollups-sdk` v0.8.5
+
 ### Building
 
 ```

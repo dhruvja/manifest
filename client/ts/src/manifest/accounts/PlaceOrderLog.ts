@@ -5,15 +5,15 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 import {
   QuoteAtomsPerBaseAtom,
   quoteAtomsPerBaseAtomBeet,
-} from './QuoteAtomsPerBaseAtom';
-import { BaseAtoms, baseAtomsBeet } from './BaseAtoms';
-import { OrderType, orderTypeBeet } from '../types/OrderType';
+} from './QuoteAtomsPerBaseAtom'
+import { BaseAtoms, baseAtomsBeet } from './BaseAtoms'
+import { OrderType, orderTypeBeet } from '../types/OrderType'
 
 /**
  * Arguments used to create {@link PlaceOrderLog}
@@ -21,17 +21,17 @@ import { OrderType, orderTypeBeet } from '../types/OrderType';
  * @category generated
  */
 export type PlaceOrderLogArgs = {
-  market: web3.PublicKey;
-  trader: web3.PublicKey;
-  price: QuoteAtomsPerBaseAtom;
-  baseAtoms: BaseAtoms;
-  orderSequenceNumber: beet.bignum;
-  orderIndex: number;
-  lastValidSlot: number;
-  orderType: OrderType;
-  isBid: boolean;
-  padding: number[] /* size: 6 */;
-};
+  market: web3.PublicKey
+  trader: web3.PublicKey
+  price: QuoteAtomsPerBaseAtom
+  baseAtoms: BaseAtoms
+  orderSequenceNumber: beet.bignum
+  orderIndex: number
+  lastValidSlot: number
+  orderType: OrderType
+  isBid: boolean
+  padding: number[] /* size: 6 */
+}
 /**
  * Holds the data for the {@link PlaceOrderLog} Account and provides de/serialization
  * functionality for that data
@@ -50,7 +50,7 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
     readonly lastValidSlot: number,
     readonly orderType: OrderType,
     readonly isBid: boolean,
-    readonly padding: number[] /* size: 6 */,
+    readonly padding: number[] /* size: 6 */
   ) {}
 
   /**
@@ -67,8 +67,8 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
       args.lastValidSlot,
       args.orderType,
       args.isBid,
-      args.padding,
-    );
+      args.padding
+    )
   }
 
   /**
@@ -77,9 +77,9 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [PlaceOrderLog, number] {
-    return PlaceOrderLog.deserialize(accountInfo.data, offset);
+    return PlaceOrderLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -91,16 +91,16 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<PlaceOrderLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find PlaceOrderLog account at ${address}`);
+      throw new Error(`Unable to find PlaceOrderLog account at ${address}`)
     }
-    return PlaceOrderLog.fromAccountInfo(accountInfo, 0)[0];
+    return PlaceOrderLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -111,10 +111,10 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, placeOrderLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, placeOrderLogBeet)
   }
 
   /**
@@ -122,7 +122,7 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [PlaceOrderLog, number] {
-    return placeOrderLogBeet.deserialize(buf, offset);
+    return placeOrderLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -130,7 +130,7 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return placeOrderLogBeet.serialize(this);
+    return placeOrderLogBeet.serialize(this)
   }
 
   /**
@@ -138,7 +138,7 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    * {@link PlaceOrderLog}
    */
   static get byteSize() {
-    return placeOrderLogBeet.byteSize;
+    return placeOrderLogBeet.byteSize
   }
 
   /**
@@ -149,12 +149,12 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       PlaceOrderLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -162,7 +162,7 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
    * hold {@link PlaceOrderLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === PlaceOrderLog.byteSize;
+    return buf.byteLength - offset === PlaceOrderLog.byteSize
   }
 
   /**
@@ -176,22 +176,22 @@ export class PlaceOrderLog implements PlaceOrderLogArgs {
       price: this.price,
       baseAtoms: this.baseAtoms,
       orderSequenceNumber: (() => {
-        const x = <{ toNumber: () => number }>this.orderSequenceNumber;
+        const x = <{ toNumber: () => number }>this.orderSequenceNumber
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
       orderIndex: this.orderIndex,
       lastValidSlot: this.lastValidSlot,
       orderType: 'OrderType.' + OrderType[this.orderType],
       isBid: this.isBid,
       padding: this.padding,
-    };
+    }
   }
 }
 
@@ -216,5 +216,5 @@ export const placeOrderLogBeet = new beet.BeetStruct<
     ['padding', beet.uniformFixedSizeArray(beet.u8, 6)],
   ],
   PlaceOrderLog.fromArgs,
-  'PlaceOrderLog',
-);
+  'PlaceOrderLog'
+)

@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
@@ -15,8 +15,8 @@ import * as web3 from '@solana/web3.js';
  * @category generated
  */
 export const GlobalCreateStruct = new beet.BeetArgsStruct<{
-  instructionDiscriminator: number;
-}>([['instructionDiscriminator', beet.u8]], 'GlobalCreateInstructionArgs');
+  instructionDiscriminator: number
+}>([['instructionDiscriminator', beet.u8]], 'GlobalCreateInstructionArgs')
 /**
  * Accounts required by the _GlobalCreate_ instruction
  *
@@ -29,15 +29,15 @@ export const GlobalCreateStruct = new beet.BeetArgsStruct<{
  * @category generated
  */
 export type GlobalCreateInstructionAccounts = {
-  payer: web3.PublicKey;
-  global: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  mint: web3.PublicKey;
-  globalVault: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  global: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  mint: web3.PublicKey
+  globalVault: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+}
 
-export const globalCreateInstructionDiscriminator = 7;
+export const globalCreateInstructionDiscriminator = 7
 
 /**
  * Creates a _GlobalCreate_ instruction.
@@ -49,11 +49,11 @@ export const globalCreateInstructionDiscriminator = 7;
  */
 export function createGlobalCreateInstruction(
   accounts: GlobalCreateInstructionAccounts,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = GlobalCreateStruct.serialize({
     instructionDiscriminator: globalCreateInstructionDiscriminator,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -85,12 +85,12 @@ export function createGlobalCreateInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

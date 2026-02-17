@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type WrapperDepositParams = {
-  amountAtoms: beet.bignum;
-};
+  amountAtoms: beet.bignum
+}
 
 /**
  * @category userTypes
@@ -17,5 +17,5 @@ export type WrapperDepositParams = {
 export const wrapperDepositParamsBeet =
   new beet.BeetArgsStruct<WrapperDepositParams>(
     [['amountAtoms', beet.u64]],
-    'WrapperDepositParams',
-  );
+    'WrapperDepositParams'
+  )

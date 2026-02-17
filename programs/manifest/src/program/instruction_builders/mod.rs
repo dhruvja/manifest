@@ -1,6 +1,8 @@
 pub mod batch_update_instruction;
 pub mod claim_seat_instruction;
+pub mod crank_funding_instruction;
 pub mod create_market_instructions;
+pub mod liquidate_instruction;
 pub mod deposit_instruction;
 pub mod expand_market_instruction;
 pub mod global_add_trader_instruction;
@@ -15,7 +17,9 @@ pub mod withdraw_instruction;
 
 pub use batch_update_instruction::*;
 pub use claim_seat_instruction::*;
+pub use crank_funding_instruction::*;
 pub use create_market_instructions::*;
+pub use liquidate_instruction::*;
 pub use deposit_instruction::*;
 pub use expand_market_instruction::*;
 pub use global_add_trader_instruction::*;
