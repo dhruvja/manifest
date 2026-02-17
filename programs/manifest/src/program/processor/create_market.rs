@@ -2,7 +2,7 @@ use std::{cell::Ref, mem::size_of};
 
 use crate::{
     logs::{emit_stack, CreateMarketLog},
-    program::{expand_market_if_needed, invoke},
+    program::invoke,
     require,
     state::MarketFixed,
     utils::create_account,
@@ -265,11 +265,6 @@ pub(crate) fn process_create_market(
             quote_mint: *quote_mint.info.key,
         })?;
     }
-
-    // Now that the market is created and initialized, construct ManifestAccountInfo for expand
-    let market_manifest: ManifestAccountInfo<MarketFixed> =
-        ManifestAccountInfo::<MarketFixed>::new(market.info)?;
-    expand_market_if_needed(&payer, &market_manifest)?;
 
     Ok(())
 }

@@ -7,7 +7,7 @@ use crate::{
 };
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, pubkey::Pubkey};
 
-use super::shared::{expand_market_if_needed, get_mut_dynamic_account};
+use super::shared::get_mut_dynamic_account;
 
 #[cfg(feature = "certora")]
 use early_panic::early_panic;
@@ -21,10 +21,20 @@ pub(crate) fn process_claim_seat(
     let claim_seat_context: ClaimSeatContext = ClaimSeatContext::load(accounts)?;
     let ClaimSeatContext { market, payer, .. } = claim_seat_context;
 
-    process_claim_seat_internal(&market, &payer)?;
+    // Require a free block to exist before claiming — market must be pre-expanded
+    // via the Expand instruction. Cannot expand here since realloc fails while delegated.
+    {
+        use crate::{program::get_dynamic_account, program::ManifestError, require};
+        let market_data = market.try_borrow_data()?;
+        let dynamic_account = get_dynamic_account(&market_data);
+        require!(
+            dynamic_account.has_free_block(),
+            ManifestError::InvalidFreeList,
+            "No free block available. Call Expand before ClaimSeat.",
+        )?;
+    }
 
-    // Leave a free block on the market
-    expand_market_if_needed(&payer, &market)?;
+    process_claim_seat_internal(&market, &payer)?;
 
     Ok(())
 }

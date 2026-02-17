@@ -2,7 +2,6 @@ use std::cell::RefMut;
 
 use crate::{
     logs::{emit_stack, PlaceOrderLogV2},
-    program::expand_market_if_needed,
     quantities::{BaseAtoms, QuoteAtoms, QuoteAtomsPerBaseAtom, WrapperU64},
     require,
     state::{
@@ -110,11 +109,23 @@ pub(crate) fn process_swap_core(
         )
     };
 
-    // Might need a free list spot for both the temporary claimed seat as well
-    // as for a partially filled reverse order. The temporary claimed seat has
-    // already been taken, so this is just checking if there is an additional
-    // free block for the reverse order.
-    expand_market_if_needed(&payer, &market)?;
+    // After claiming the seat (if needed), we still need at least one free block
+    // for a potential resting order. Cannot expand here — market must be pre-expanded
+    // via the Expand instruction before trading (especially while delegated to ER).
+    {
+        #[cfg(not(feature = "certora"))]
+        {
+            use crate::program::ManifestError;
+            let market_data = market.try_borrow_data()?;
+            let dynamic_account =
+                crate::program::get_dynamic_account(&market_data);
+            require!(
+                dynamic_account.has_free_block(),
+                ManifestError::InvalidFreeList,
+                "No free block available. Call Expand before Swap.",
+            )?;
+        }
+    }
 
     let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
     let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);

@@ -1086,6 +1086,11 @@ impl MarketFixture {
         .await
         .unwrap();
 
+        // Pre-expand so callers don't need to call Expand before ClaimSeat/Swap/BatchUpdate.
+        expand_market(Rc::clone(&context), &market_key, 10)
+            .await
+            .unwrap();
+
         let context_ref: Rc<RefCell<ProgramTestContext>> = Rc::clone(&context);
 
         let mut lamports: u64 = 0;
@@ -1196,6 +1201,11 @@ impl MarketFixture {
         )
         .await
         .unwrap();
+
+        // Pre-expand so callers don't need to call Expand before ClaimSeat/Swap/BatchUpdate.
+        expand_market(Rc::clone(&context), &market_key, 10)
+            .await
+            .unwrap();
 
         let context_ref: Rc<RefCell<ProgramTestContext>> = Rc::clone(&context);
 

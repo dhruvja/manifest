@@ -20,7 +20,7 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
-use super::{expand_market_if_needed, shared::get_mut_dynamic_account};
+use super::shared::get_mut_dynamic_account;
 
 use crate::validation::loaders::GlobalTradeAccounts;
 #[cfg(feature = "certora")]
@@ -326,9 +326,16 @@ pub(crate) fn process_batch_update_core(
             let order_type: OrderType = place_order_params.order_type();
             let last_valid_slot: u32 = place_order_params.last_valid_slot();
 
-            // Need to reborrow every iteration so we can borrow later for expanding.
             let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
             let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
+
+            // Require a free block before each order placement — cannot expand here
+            // since realloc fails while delegated to ER. Call Expand separately.
+            require!(
+                dynamic_account.has_free_block(),
+                crate::program::ManifestError::InvalidFreeList,
+                "No free block available. Call Expand before BatchUpdate.",
+            )?;
 
             // For asks: virtually credit base atoms so the engine can
             // reserve them for the resting order. Base is virtual.
@@ -436,7 +443,6 @@ pub(crate) fn process_batch_update_core(
             })?;
             result.push((order_sequence_number, order_index));
         }
-        expand_market_if_needed(&payer, &market)?;
     }
 
     // Store current global cumulative funding checkpoint for lazy settlement.
