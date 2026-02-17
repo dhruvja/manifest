@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import { DepositParams, depositParamsBeet } from '../types/DepositParams';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import { DepositParams, depositParamsBeet } from '../types/DepositParams'
 
 /**
  * @category Instructions
@@ -16,9 +16,9 @@ import { DepositParams, depositParamsBeet } from '../types/DepositParams';
  * @category generated
  */
 export type DepositInstructionArgs = {
-  params: DepositParams;
-  traderIndexHint: beet.COption<number>;
-};
+  params: DepositParams
+  traderIndexHint: beet.COption<number>
+}
 /**
  * @category Instructions
  * @category Deposit
@@ -26,7 +26,7 @@ export type DepositInstructionArgs = {
  */
 export const DepositStruct = new beet.FixableBeetArgsStruct<
   DepositInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
@@ -34,8 +34,8 @@ export const DepositStruct = new beet.FixableBeetArgsStruct<
     ['params', depositParamsBeet],
     ['traderIndexHint', beet.coption(beet.u32)],
   ],
-  'DepositInstructionArgs',
-);
+  'DepositInstructionArgs'
+)
 /**
  * Accounts required by the _Deposit_ instruction
  *
@@ -49,15 +49,15 @@ export const DepositStruct = new beet.FixableBeetArgsStruct<
  * @category generated
  */
 export type DepositInstructionAccounts = {
-  payer: web3.PublicKey;
-  market: web3.PublicKey;
-  traderToken: web3.PublicKey;
-  vault: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-  mint: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  market: web3.PublicKey
+  traderToken: web3.PublicKey
+  vault: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+  mint: web3.PublicKey
+}
 
-export const depositInstructionDiscriminator = 2;
+export const depositInstructionDiscriminator = 2
 
 /**
  * Creates a _Deposit_ instruction.
@@ -72,12 +72,12 @@ export const depositInstructionDiscriminator = 2;
 export function createDepositInstruction(
   accounts: DepositInstructionAccounts,
   args: DepositInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = DepositStruct.serialize({
     instructionDiscriminator: depositInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -109,12 +109,12 @@ export function createDepositInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

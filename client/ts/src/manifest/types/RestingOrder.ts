@@ -5,18 +5,18 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import { OrderType, orderTypeBeet } from './OrderType';
+import * as beet from '@metaplex-foundation/beet'
+import { OrderType, orderTypeBeet } from './OrderType'
 export type RestingOrder = {
-  price: beet.bignum;
-  numBaseAtoms: beet.bignum;
-  sequenceNumber: beet.bignum;
-  traderIndex: number;
-  lastValidSlot: number;
-  isBid: boolean;
-  orderType: OrderType;
-  padding: number[] /* size: 22 */;
-};
+  price: beet.bignum
+  numBaseAtoms: beet.bignum
+  sequenceNumber: beet.bignum
+  traderIndex: number
+  lastValidSlot: number
+  isBid: boolean
+  orderType: OrderType
+  padding: number[] /* size: 22 */
+}
 
 /**
  * @category userTypes
@@ -33,5 +33,5 @@ export const restingOrderBeet = new beet.BeetArgsStruct<RestingOrder>(
     ['orderType', orderTypeBeet],
     ['padding', beet.uniformFixedSizeArray(beet.u8, 22)],
   ],
-  'RestingOrder',
-);
+  'RestingOrder'
+)

@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link GlobalAtoms}
@@ -15,8 +15,8 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type GlobalAtomsArgs = {
-  inner: beet.bignum;
-};
+  inner: beet.bignum
+}
 /**
  * Holds the data for the {@link GlobalAtoms} Account and provides de/serialization
  * functionality for that data
@@ -31,7 +31,7 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    * Creates a {@link GlobalAtoms} instance from the provided args.
    */
   static fromArgs(args: GlobalAtomsArgs) {
-    return new GlobalAtoms(args.inner);
+    return new GlobalAtoms(args.inner)
   }
 
   /**
@@ -40,9 +40,9 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalAtoms, number] {
-    return GlobalAtoms.deserialize(accountInfo.data, offset);
+    return GlobalAtoms.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -54,16 +54,16 @@ export class GlobalAtoms implements GlobalAtomsArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalAtoms> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find GlobalAtoms account at ${address}`);
+      throw new Error(`Unable to find GlobalAtoms account at ${address}`)
     }
-    return GlobalAtoms.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalAtoms.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -74,10 +74,10 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalAtomsBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalAtomsBeet)
   }
 
   /**
@@ -85,7 +85,7 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalAtoms, number] {
-    return globalAtomsBeet.deserialize(buf, offset);
+    return globalAtomsBeet.deserialize(buf, offset)
   }
 
   /**
@@ -93,7 +93,7 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalAtomsBeet.serialize(this);
+    return globalAtomsBeet.serialize(this)
   }
 
   /**
@@ -101,7 +101,7 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    * {@link GlobalAtoms}
    */
   static get byteSize() {
-    return globalAtomsBeet.byteSize;
+    return globalAtomsBeet.byteSize
   }
 
   /**
@@ -112,12 +112,12 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalAtoms.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -125,7 +125,7 @@ export class GlobalAtoms implements GlobalAtomsArgs {
    * hold {@link GlobalAtoms} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalAtoms.byteSize;
+    return buf.byteLength - offset === GlobalAtoms.byteSize
   }
 
   /**
@@ -135,17 +135,17 @@ export class GlobalAtoms implements GlobalAtomsArgs {
   pretty() {
     return {
       inner: (() => {
-        const x = <{ toNumber: () => number }>this.inner;
+        const x = <{ toNumber: () => number }>this.inner
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -156,4 +156,4 @@ export class GlobalAtoms implements GlobalAtomsArgs {
 export const globalAtomsBeet = new beet.BeetStruct<
   GlobalAtoms,
   GlobalAtomsArgs
->([['inner', beet.u64]], GlobalAtoms.fromArgs, 'GlobalAtoms');
+>([['inner', beet.u64]], GlobalAtoms.fromArgs, 'GlobalAtoms')

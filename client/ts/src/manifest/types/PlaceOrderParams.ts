@@ -5,16 +5,16 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import { OrderType, orderTypeBeet } from './OrderType';
+import * as beet from '@metaplex-foundation/beet'
+import { OrderType, orderTypeBeet } from './OrderType'
 export type PlaceOrderParams = {
-  baseAtoms: beet.bignum;
-  priceMantissa: number;
-  priceExponent: number;
-  isBid: boolean;
-  lastValidSlot: number;
-  orderType: OrderType;
-};
+  baseAtoms: beet.bignum
+  priceMantissa: number
+  priceExponent: number
+  isBid: boolean
+  lastValidSlot: number
+  orderType: OrderType
+}
 
 /**
  * @category userTypes
@@ -29,5 +29,5 @@ export const placeOrderParamsBeet = new beet.BeetArgsStruct<PlaceOrderParams>(
     ['lastValidSlot', beet.u32],
     ['orderType', orderTypeBeet],
   ],
-  'PlaceOrderParams',
-);
+  'PlaceOrderParams'
+)

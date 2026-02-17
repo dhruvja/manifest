@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
-import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
+import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms'
 
 /**
  * Arguments used to create {@link GlobalCleanupLog}
@@ -16,11 +16,11 @@ import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
  * @category generated
  */
 export type GlobalCleanupLogArgs = {
-  cleaner: web3.PublicKey;
-  maker: web3.PublicKey;
-  amountDesired: GlobalAtoms;
-  amountDeposited: GlobalAtoms;
-};
+  cleaner: web3.PublicKey
+  maker: web3.PublicKey
+  amountDesired: GlobalAtoms
+  amountDeposited: GlobalAtoms
+}
 /**
  * Holds the data for the {@link GlobalCleanupLog} Account and provides de/serialization
  * functionality for that data
@@ -33,7 +33,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
     readonly cleaner: web3.PublicKey,
     readonly maker: web3.PublicKey,
     readonly amountDesired: GlobalAtoms,
-    readonly amountDeposited: GlobalAtoms,
+    readonly amountDeposited: GlobalAtoms
   ) {}
 
   /**
@@ -44,8 +44,8 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
       args.cleaner,
       args.maker,
       args.amountDesired,
-      args.amountDeposited,
-    );
+      args.amountDeposited
+    )
   }
 
   /**
@@ -54,9 +54,9 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalCleanupLog, number] {
-    return GlobalCleanupLog.deserialize(accountInfo.data, offset);
+    return GlobalCleanupLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -68,16 +68,16 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalCleanupLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find GlobalCleanupLog account at ${address}`);
+      throw new Error(`Unable to find GlobalCleanupLog account at ${address}`)
     }
-    return GlobalCleanupLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalCleanupLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -88,10 +88,10 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalCleanupLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalCleanupLogBeet)
   }
 
   /**
@@ -99,7 +99,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalCleanupLog, number] {
-    return globalCleanupLogBeet.deserialize(buf, offset);
+    return globalCleanupLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -107,7 +107,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalCleanupLogBeet.serialize(this);
+    return globalCleanupLogBeet.serialize(this)
   }
 
   /**
@@ -115,7 +115,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    * {@link GlobalCleanupLog}
    */
   static get byteSize() {
-    return globalCleanupLogBeet.byteSize;
+    return globalCleanupLogBeet.byteSize
   }
 
   /**
@@ -126,12 +126,12 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalCleanupLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -139,7 +139,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
    * hold {@link GlobalCleanupLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalCleanupLog.byteSize;
+    return buf.byteLength - offset === GlobalCleanupLog.byteSize
   }
 
   /**
@@ -152,7 +152,7 @@ export class GlobalCleanupLog implements GlobalCleanupLogArgs {
       maker: this.maker.toBase58(),
       amountDesired: this.amountDesired,
       amountDeposited: this.amountDeposited,
-    };
+    }
   }
 }
 
@@ -171,5 +171,5 @@ export const globalCleanupLogBeet = new beet.BeetStruct<
     ['amountDeposited', globalAtomsBeet],
   ],
   GlobalCleanupLog.fromArgs,
-  'GlobalCleanupLog',
-);
+  'GlobalCleanupLog'
+)

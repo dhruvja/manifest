@@ -5,12 +5,12 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   WrapperBatchUpdateParams,
   wrapperBatchUpdateParamsBeet,
-} from '../types/WrapperBatchUpdateParams';
+} from '../types/WrapperBatchUpdateParams'
 
 /**
  * @category Instructions
@@ -18,8 +18,8 @@ import {
  * @category generated
  */
 export type BatchUpdateQuoteGlobalInstructionArgs = {
-  params: WrapperBatchUpdateParams;
-};
+  params: WrapperBatchUpdateParams
+}
 /**
  * @category Instructions
  * @category BatchUpdateQuoteGlobal
@@ -27,15 +27,15 @@ export type BatchUpdateQuoteGlobalInstructionArgs = {
  */
 export const BatchUpdateQuoteGlobalStruct = new beet.FixableBeetArgsStruct<
   BatchUpdateQuoteGlobalInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', wrapperBatchUpdateParamsBeet],
   ],
-  'BatchUpdateQuoteGlobalInstructionArgs',
-);
+  'BatchUpdateQuoteGlobalInstructionArgs'
+)
 /**
  * Accounts required by the _BatchUpdateQuoteGlobal_ instruction
  *
@@ -53,19 +53,19 @@ export const BatchUpdateQuoteGlobalStruct = new beet.FixableBeetArgsStruct<
  * @category generated
  */
 export type BatchUpdateQuoteGlobalInstructionAccounts = {
-  wrapperState: web3.PublicKey;
-  manifestProgram: web3.PublicKey;
-  owner: web3.PublicKey;
-  market: web3.PublicKey;
-  systemProgram?: web3.PublicKey;
-  quoteMint: web3.PublicKey;
-  quoteGlobal: web3.PublicKey;
-  quoteGlobalVault: web3.PublicKey;
-  quoteMarketVault: web3.PublicKey;
-  quoteTokenProgram: web3.PublicKey;
-};
+  wrapperState: web3.PublicKey
+  manifestProgram: web3.PublicKey
+  owner: web3.PublicKey
+  market: web3.PublicKey
+  systemProgram?: web3.PublicKey
+  quoteMint: web3.PublicKey
+  quoteGlobal: web3.PublicKey
+  quoteGlobalVault: web3.PublicKey
+  quoteMarketVault: web3.PublicKey
+  quoteTokenProgram: web3.PublicKey
+}
 
-export const batchUpdateQuoteGlobalInstructionDiscriminator = 6;
+export const batchUpdateQuoteGlobalInstructionDiscriminator = 6
 
 /**
  * Creates a _BatchUpdateQuoteGlobal_ instruction.
@@ -80,12 +80,12 @@ export const batchUpdateQuoteGlobalInstructionDiscriminator = 6;
 export function createBatchUpdateQuoteGlobalInstruction(
   accounts: BatchUpdateQuoteGlobalInstructionAccounts,
   args: BatchUpdateQuoteGlobalInstructionArgs,
-  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL'),
+  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL')
 ) {
   const [data] = BatchUpdateQuoteGlobalStruct.serialize({
     instructionDiscriminator: batchUpdateQuoteGlobalInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.wrapperState,
@@ -124,12 +124,12 @@ export function createBatchUpdateQuoteGlobalInstruction(
     },
     {
       pubkey: accounts.quoteGlobalVault,
-      isWritable: true,
+      isWritable: false,
       isSigner: false,
     },
     {
       pubkey: accounts.quoteMarketVault,
-      isWritable: true,
+      isWritable: false,
       isSigner: false,
     },
     {
@@ -137,12 +137,12 @@ export function createBatchUpdateQuoteGlobalInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

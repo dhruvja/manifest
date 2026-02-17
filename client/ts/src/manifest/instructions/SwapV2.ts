@@ -11,19 +11,19 @@ import { SwapParams, swapParamsBeet } from '../types/SwapParams'
 
 /**
  * @category Instructions
- * @category Swap
+ * @category SwapV2
  * @category generated
  */
-export type SwapInstructionArgs = {
+export type SwapV2InstructionArgs = {
   params: SwapParams
 }
 /**
  * @category Instructions
- * @category Swap
+ * @category SwapV2
  * @category generated
  */
-export const SwapStruct = new beet.BeetArgsStruct<
-  SwapInstructionArgs & {
+export const SwapV2Struct = new beet.BeetArgsStruct<
+  SwapV2InstructionArgs & {
     instructionDiscriminator: number
   }
 >(
@@ -31,12 +31,13 @@ export const SwapStruct = new beet.BeetArgsStruct<
     ['instructionDiscriminator', beet.u8],
     ['params', swapParamsBeet],
   ],
-  'SwapInstructionArgs'
+  'SwapV2InstructionArgs'
 )
 /**
- * Accounts required by the _Swap_ instruction
+ * Accounts required by the _SwapV2_ instruction
  *
  * @property [_writable_, **signer**] payer
+ * @property [_writable_, **signer**] owner
  * @property [_writable_] market
  * @property [_writable_] traderBase
  * @property [_writable_] traderQuote
@@ -49,11 +50,12 @@ export const SwapStruct = new beet.BeetArgsStruct<
  * @property [_writable_] global (optional)
  * @property [_writable_] globalVault (optional)
  * @category Instructions
- * @category Swap
+ * @category SwapV2
  * @category generated
  */
-export type SwapInstructionAccounts = {
+export type SwapV2InstructionAccounts = {
   payer: web3.PublicKey
+  owner: web3.PublicKey
   market: web3.PublicKey
   systemProgram?: web3.PublicKey
   traderBase: web3.PublicKey
@@ -68,10 +70,10 @@ export type SwapInstructionAccounts = {
   globalVault?: web3.PublicKey
 }
 
-export const swapInstructionDiscriminator = 4
+export const swapV2InstructionDiscriminator = 13
 
 /**
- * Creates a _Swap_ instruction.
+ * Creates a _SwapV2_ instruction.
  *
  * Optional accounts that are not provided will be omitted from the accounts
  * array passed with the instruction.
@@ -82,21 +84,26 @@ export const swapInstructionDiscriminator = 4
  * @param args to provide as instruction data to the program
  *
  * @category Instructions
- * @category Swap
+ * @category SwapV2
  * @category generated
  */
-export function createSwapInstruction(
-  accounts: SwapInstructionAccounts,
-  args: SwapInstructionArgs,
+export function createSwapV2Instruction(
+  accounts: SwapV2InstructionAccounts,
+  args: SwapV2InstructionArgs,
   programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
-  const [data] = SwapStruct.serialize({
-    instructionDiscriminator: swapInstructionDiscriminator,
+  const [data] = SwapV2Struct.serialize({
+    instructionDiscriminator: swapV2InstructionDiscriminator,
     ...args,
   })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
+      isWritable: true,
+      isSigner: true,
+    },
+    {
+      pubkey: accounts.owner,
       isWritable: true,
       isSigner: true,
     },

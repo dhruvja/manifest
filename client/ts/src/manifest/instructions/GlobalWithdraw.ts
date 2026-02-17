@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token';
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token'
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
 import {
   GlobalWithdrawParams,
   globalWithdrawParamsBeet,
-} from '../types/GlobalWithdrawParams';
+} from '../types/GlobalWithdrawParams'
 
 /**
  * @category Instructions
@@ -19,8 +19,8 @@ import {
  * @category generated
  */
 export type GlobalWithdrawInstructionArgs = {
-  params: GlobalWithdrawParams;
-};
+  params: GlobalWithdrawParams
+}
 /**
  * @category Instructions
  * @category GlobalWithdraw
@@ -28,15 +28,15 @@ export type GlobalWithdrawInstructionArgs = {
  */
 export const GlobalWithdrawStruct = new beet.BeetArgsStruct<
   GlobalWithdrawInstructionArgs & {
-    instructionDiscriminator: number;
+    instructionDiscriminator: number
   }
 >(
   [
     ['instructionDiscriminator', beet.u8],
     ['params', globalWithdrawParamsBeet],
   ],
-  'GlobalWithdrawInstructionArgs',
-);
+  'GlobalWithdrawInstructionArgs'
+)
 /**
  * Accounts required by the _GlobalWithdraw_ instruction
  *
@@ -50,15 +50,15 @@ export const GlobalWithdrawStruct = new beet.BeetArgsStruct<
  * @category generated
  */
 export type GlobalWithdrawInstructionAccounts = {
-  payer: web3.PublicKey;
-  global: web3.PublicKey;
-  mint: web3.PublicKey;
-  globalVault: web3.PublicKey;
-  traderToken: web3.PublicKey;
-  tokenProgram?: web3.PublicKey;
-};
+  payer: web3.PublicKey
+  global: web3.PublicKey
+  mint: web3.PublicKey
+  globalVault: web3.PublicKey
+  traderToken: web3.PublicKey
+  tokenProgram?: web3.PublicKey
+}
 
-export const globalWithdrawInstructionDiscriminator = 10;
+export const globalWithdrawInstructionDiscriminator = 10
 
 /**
  * Creates a _GlobalWithdraw_ instruction.
@@ -73,12 +73,12 @@ export const globalWithdrawInstructionDiscriminator = 10;
 export function createGlobalWithdrawInstruction(
   accounts: GlobalWithdrawInstructionAccounts,
   args: GlobalWithdrawInstructionArgs,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'),
+  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
   const [data] = GlobalWithdrawStruct.serialize({
     instructionDiscriminator: globalWithdrawInstructionDiscriminator,
     ...args,
-  });
+  })
   const keys: web3.AccountMeta[] = [
     {
       pubkey: accounts.payer,
@@ -110,12 +110,12 @@ export function createGlobalWithdrawInstruction(
       isWritable: false,
       isSigner: false,
     },
-  ];
+  ]
 
   const ix = new web3.TransactionInstruction({
     programId,
     keys,
     data,
-  });
-  return ix;
+  })
+  return ix
 }

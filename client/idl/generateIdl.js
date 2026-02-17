@@ -61,7 +61,7 @@ function genLogDiscriminator(programIdString, accName) {
 function modifyIdlCore(programName) {
   console.log('Adding arguments to IDL for', programName);
   const generatedIdlPath = path.join(idlDir, `${programName}.json`);
-  let idl = require(generatedIdlPath);
+  let idl = JSON.parse(fs.readFileSync(generatedIdlPath, 'utf8'));
 
   // Shank does not understand the type alias.
   idl = findAndReplaceRecursively(idl, { defined: 'DataIndex' }, 'u32');
@@ -108,7 +108,48 @@ function modifyIdlCore(programName) {
 
     updateIdlTypes(idl);
 
+    // Patch instructions that shank cannot fully extract (e.g. params with Pubkey fields).
+    // We always override accounts and discriminant for these, since shank emits them
+    // with empty accounts when it encounters unsupported types.
+    const patchInstruction = (name, discriminantValue, accounts) => {
+      const existing = idl.instructions.find((i) => i.name === name);
+      if (existing) {
+        existing.discriminant = { type: 'u8', value: discriminantValue };
+        existing.accounts = accounts;
+      } else {
+        idl.instructions.push({ name, discriminant: { type: 'u8', value: discriminantValue }, accounts, args: [] });
+      }
+    };
+    patchInstruction('DelegateMarket', 14, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer and market creator'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Market PDA to delegate'] },
+      { name: 'ownerProgram', isMut: false, isSigner: false, docs: ['Manifest program (owner of the PDA)'] },
+      { name: 'delegationProgram', isMut: false, isSigner: false, docs: ['MagicBlock delegation program'] },
+      { name: 'delegationRecord', isMut: true, isSigner: false, docs: ['Delegation record PDA'] },
+      { name: 'delegationMetadata', isMut: true, isSigner: false, docs: ['Delegation metadata PDA'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'buffer', isMut: true, isSigner: false, docs: ['Buffer account for delegation'] },
+    ]);
+    patchInstruction('CommitMarket', 15, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Delegated market account'] },
+      { name: 'magicProgram', isMut: false, isSigner: false, docs: ['MagicBlock magic program'] },
+      { name: 'magicContext', isMut: false, isSigner: false, docs: ['MagicBlock magic context'] },
+    ]);
+    patchInstruction('Liquidate', 16, [
+      { name: 'liquidator', isMut: true, isSigner: true, docs: ['Liquidator'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Perps market account'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+    ]);
+    patchInstruction('CrankFunding', 17, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer / cranker'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Perps market account'] },
+      { name: 'pythPriceFeed', isMut: false, isSigner: false, docs: ['Pyth price feed account'] },
+    ]);
+
     for (const instruction of idl.instructions) {
+      // Reset args so the script is idempotent across multiple runs
+      instruction.args = [];
       switch (instruction.name) {
         case 'CreateMarket': {
           // Create market does not have params
@@ -225,6 +266,24 @@ function modifyIdlCore(programName) {
             },
           });
           break;
+        case 'DelegateMarket': {
+          break;
+        }
+        case 'CommitMarket': {
+          break;
+        }
+        case 'CrankFunding': {
+          break;
+        }
+        case 'Liquidate': {
+          instruction.args.push({
+            name: 'params',
+            type: {
+              defined: 'LiquidateParams',
+            },
+          });
+          break;
+        }
         default: {
           console.log(instruction);
           throw new Error('Unexpected instruction');
@@ -234,6 +293,22 @@ function modifyIdlCore(programName) {
 
     // Return type has a tuple which anchor does not support
     idl.types = idl.types.filter((idlType) => idlType.name != "BatchUpdateReturn");
+
+    // LiquidateParams contains a Pubkey field which shank cannot handle automatically
+    if (!idl.types.find((t) => t.name === 'LiquidateParams')) {
+      idl.types.push({
+        name: 'LiquidateParams',
+        type: {
+          kind: 'struct',
+          fields: [
+            {
+              name: 'traderToLiquidate',
+              type: 'publicKey',
+            },
+          ],
+        },
+      });
+    }
 
   } else if (programName == 'wrapper') {
     idl.types.push({
@@ -265,18 +340,12 @@ function modifyIdlCore(programName) {
       type: {
         kind: 'enum',
         variants: [
-          {
-            name: 'Limit',
-          },
-          {
-            name: 'ImmediateOrCancel',
-          },
-          {
-            name: 'PostOnly',
-          },
-          {
-            name: 'Global',
-          },
+          { name: 'Limit' },
+          { name: 'ImmediateOrCancel' },
+          { name: 'PostOnly' },
+          { name: 'Global' },
+          { name: 'Reverse' },
+          { name: 'ReverseTight' },
         ],
       },
     });

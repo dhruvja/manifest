@@ -10,52 +10,47 @@ import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
- * @category GlobalAddTrader
+ * @category Collect
  * @category generated
  */
-export const GlobalAddTraderStruct = new beet.BeetArgsStruct<{
+export const CollectStruct = new beet.BeetArgsStruct<{
   instructionDiscriminator: number
-}>([['instructionDiscriminator', beet.u8]], 'GlobalAddTraderInstructionArgs')
+}>([['instructionDiscriminator', beet.u8]], 'CollectInstructionArgs')
 /**
- * Accounts required by the _GlobalAddTrader_ instruction
+ * Accounts required by the _Collect_ instruction
  *
- * @property [_writable_, **signer**] payer
- * @property [_writable_] global
+ * @property [_writable_] wrapperState
+ * @property [_writable_, **signer**] collector
  * @category Instructions
- * @category GlobalAddTrader
+ * @category Collect
  * @category generated
  */
-export type GlobalAddTraderInstructionAccounts = {
-  payer: web3.PublicKey
-  global: web3.PublicKey
+export type CollectInstructionAccounts = {
+  wrapperState: web3.PublicKey
   systemProgram?: web3.PublicKey
+  collector: web3.PublicKey
 }
 
-export const globalAddTraderInstructionDiscriminator = 8
+export const collectInstructionDiscriminator = 7
 
 /**
- * Creates a _GlobalAddTrader_ instruction.
+ * Creates a _Collect_ instruction.
  *
  * @param accounts that will be accessed while the instruction is processed
  * @category Instructions
- * @category GlobalAddTrader
+ * @category Collect
  * @category generated
  */
-export function createGlobalAddTraderInstruction(
-  accounts: GlobalAddTraderInstructionAccounts,
-  programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
+export function createCollectInstruction(
+  accounts: CollectInstructionAccounts,
+  programId = new web3.PublicKey('wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL')
 ) {
-  const [data] = GlobalAddTraderStruct.serialize({
-    instructionDiscriminator: globalAddTraderInstructionDiscriminator,
+  const [data] = CollectStruct.serialize({
+    instructionDiscriminator: collectInstructionDiscriminator,
   })
   const keys: web3.AccountMeta[] = [
     {
-      pubkey: accounts.payer,
-      isWritable: true,
-      isSigner: true,
-    },
-    {
-      pubkey: accounts.global,
+      pubkey: accounts.wrapperState,
       isWritable: true,
       isSigner: false,
     },
@@ -63,6 +58,11 @@ export function createGlobalAddTraderInstruction(
       pubkey: accounts.systemProgram ?? web3.SystemProgram.programId,
       isWritable: false,
       isSigner: false,
+    },
+    {
+      pubkey: accounts.collector,
+      isWritable: true,
+      isSigner: true,
     },
   ]
 

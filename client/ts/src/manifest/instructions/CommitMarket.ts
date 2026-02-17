@@ -10,43 +10,46 @@ import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CommitMarket
  * @category generated
  */
-export const GlobalAddTraderStruct = new beet.BeetArgsStruct<{
+export const CommitMarketStruct = new beet.BeetArgsStruct<{
   instructionDiscriminator: number
-}>([['instructionDiscriminator', beet.u8]], 'GlobalAddTraderInstructionArgs')
+}>([['instructionDiscriminator', beet.u8]], 'CommitMarketInstructionArgs')
 /**
- * Accounts required by the _GlobalAddTrader_ instruction
+ * Accounts required by the _CommitMarket_ instruction
  *
  * @property [_writable_, **signer**] payer
- * @property [_writable_] global
+ * @property [_writable_] market
+ * @property [] magicProgram
+ * @property [] magicContext
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CommitMarket
  * @category generated
  */
-export type GlobalAddTraderInstructionAccounts = {
+export type CommitMarketInstructionAccounts = {
   payer: web3.PublicKey
-  global: web3.PublicKey
-  systemProgram?: web3.PublicKey
+  market: web3.PublicKey
+  magicProgram: web3.PublicKey
+  magicContext: web3.PublicKey
 }
 
-export const globalAddTraderInstructionDiscriminator = 8
+export const commitMarketInstructionDiscriminator = 15
 
 /**
- * Creates a _GlobalAddTrader_ instruction.
+ * Creates a _CommitMarket_ instruction.
  *
  * @param accounts that will be accessed while the instruction is processed
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CommitMarket
  * @category generated
  */
-export function createGlobalAddTraderInstruction(
-  accounts: GlobalAddTraderInstructionAccounts,
+export function createCommitMarketInstruction(
+  accounts: CommitMarketInstructionAccounts,
   programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
-  const [data] = GlobalAddTraderStruct.serialize({
-    instructionDiscriminator: globalAddTraderInstructionDiscriminator,
+  const [data] = CommitMarketStruct.serialize({
+    instructionDiscriminator: commitMarketInstructionDiscriminator,
   })
   const keys: web3.AccountMeta[] = [
     {
@@ -55,12 +58,17 @@ export function createGlobalAddTraderInstruction(
       isSigner: true,
     },
     {
-      pubkey: accounts.global,
+      pubkey: accounts.market,
       isWritable: true,
       isSigner: false,
     },
     {
-      pubkey: accounts.systemProgram ?? web3.SystemProgram.programId,
+      pubkey: accounts.magicProgram,
+      isWritable: false,
+      isSigner: false,
+    },
+    {
+      pubkey: accounts.magicContext,
       isWritable: false,
       isSigner: false,
     },

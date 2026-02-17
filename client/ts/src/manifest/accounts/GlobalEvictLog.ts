@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
-import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
+import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms'
 
 /**
  * Arguments used to create {@link GlobalEvictLog}
@@ -16,11 +16,11 @@ import { GlobalAtoms, globalAtomsBeet } from './GlobalAtoms';
  * @category generated
  */
 export type GlobalEvictLogArgs = {
-  evictor: web3.PublicKey;
-  evictee: web3.PublicKey;
-  evictorAtoms: GlobalAtoms;
-  evicteeAtoms: GlobalAtoms;
-};
+  evictor: web3.PublicKey
+  evictee: web3.PublicKey
+  evictorAtoms: GlobalAtoms
+  evicteeAtoms: GlobalAtoms
+}
 /**
  * Holds the data for the {@link GlobalEvictLog} Account and provides de/serialization
  * functionality for that data
@@ -33,7 +33,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
     readonly evictor: web3.PublicKey,
     readonly evictee: web3.PublicKey,
     readonly evictorAtoms: GlobalAtoms,
-    readonly evicteeAtoms: GlobalAtoms,
+    readonly evicteeAtoms: GlobalAtoms
   ) {}
 
   /**
@@ -44,8 +44,8 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
       args.evictor,
       args.evictee,
       args.evictorAtoms,
-      args.evicteeAtoms,
-    );
+      args.evicteeAtoms
+    )
   }
 
   /**
@@ -54,9 +54,9 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalEvictLog, number] {
-    return GlobalEvictLog.deserialize(accountInfo.data, offset);
+    return GlobalEvictLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -68,16 +68,16 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalEvictLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find GlobalEvictLog account at ${address}`);
+      throw new Error(`Unable to find GlobalEvictLog account at ${address}`)
     }
-    return GlobalEvictLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalEvictLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -88,10 +88,10 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalEvictLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalEvictLogBeet)
   }
 
   /**
@@ -99,7 +99,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalEvictLog, number] {
-    return globalEvictLogBeet.deserialize(buf, offset);
+    return globalEvictLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -107,7 +107,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalEvictLogBeet.serialize(this);
+    return globalEvictLogBeet.serialize(this)
   }
 
   /**
@@ -115,7 +115,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    * {@link GlobalEvictLog}
    */
   static get byteSize() {
-    return globalEvictLogBeet.byteSize;
+    return globalEvictLogBeet.byteSize
   }
 
   /**
@@ -126,12 +126,12 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalEvictLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -139,7 +139,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
    * hold {@link GlobalEvictLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalEvictLog.byteSize;
+    return buf.byteLength - offset === GlobalEvictLog.byteSize
   }
 
   /**
@@ -152,7 +152,7 @@ export class GlobalEvictLog implements GlobalEvictLogArgs {
       evictee: this.evictee.toBase58(),
       evictorAtoms: this.evictorAtoms,
       evicteeAtoms: this.evicteeAtoms,
-    };
+    }
   }
 }
 
@@ -171,5 +171,5 @@ export const globalEvictLogBeet = new beet.BeetStruct<
     ['evicteeAtoms', globalAtomsBeet],
   ],
   GlobalEvictLog.fromArgs,
-  'GlobalEvictLog',
-);
+  'GlobalEvictLog'
+)

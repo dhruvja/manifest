@@ -5,20 +5,20 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 import {
   WrapperCancelOrderParams,
   wrapperCancelOrderParamsBeet,
-} from './WrapperCancelOrderParams';
+} from './WrapperCancelOrderParams'
 import {
   WrapperPlaceOrderParams,
   wrapperPlaceOrderParamsBeet,
-} from './WrapperPlaceOrderParams';
+} from './WrapperPlaceOrderParams'
 export type WrapperBatchUpdateParams = {
-  cancels: WrapperCancelOrderParams[];
-  cancelAll: boolean;
-  orders: WrapperPlaceOrderParams[];
-};
+  cancels: WrapperCancelOrderParams[]
+  cancelAll: boolean
+  orders: WrapperPlaceOrderParams[]
+}
 
 /**
  * @category userTypes
@@ -31,5 +31,5 @@ export const wrapperBatchUpdateParamsBeet =
       ['cancelAll', beet.bool],
       ['orders', beet.array(wrapperPlaceOrderParamsBeet)],
     ],
-    'WrapperBatchUpdateParams',
-  );
+    'WrapperBatchUpdateParams'
+  )

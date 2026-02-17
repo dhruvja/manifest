@@ -5,15 +5,15 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 import {
   QuoteAtomsPerBaseAtom,
   quoteAtomsPerBaseAtomBeet,
-} from './QuoteAtomsPerBaseAtom';
-import { BaseAtoms, baseAtomsBeet } from './BaseAtoms';
-import { QuoteAtoms, quoteAtomsBeet } from './QuoteAtoms';
+} from './QuoteAtomsPerBaseAtom'
+import { BaseAtoms, baseAtomsBeet } from './BaseAtoms'
+import { QuoteAtoms, quoteAtomsBeet } from './QuoteAtoms'
 
 /**
  * Arguments used to create {@link FillLog}
@@ -21,20 +21,20 @@ import { QuoteAtoms, quoteAtomsBeet } from './QuoteAtoms';
  * @category generated
  */
 export type FillLogArgs = {
-  market: web3.PublicKey;
-  maker: web3.PublicKey;
-  taker: web3.PublicKey;
-  baseMint: web3.PublicKey;
-  quoteMint: web3.PublicKey;
-  price: QuoteAtomsPerBaseAtom;
-  baseAtoms: BaseAtoms;
-  quoteAtoms: QuoteAtoms;
-  makerSequenceNumber: beet.bignum;
-  takerSequenceNumber: beet.bignum;
-  takerIsBuy: boolean;
-  isMakerGlobal: boolean;
-  padding: number[] /* size: 14 */;
-};
+  market: web3.PublicKey
+  maker: web3.PublicKey
+  taker: web3.PublicKey
+  baseMint: web3.PublicKey
+  quoteMint: web3.PublicKey
+  price: QuoteAtomsPerBaseAtom
+  baseAtoms: BaseAtoms
+  quoteAtoms: QuoteAtoms
+  makerSequenceNumber: beet.bignum
+  takerSequenceNumber: beet.bignum
+  takerIsBuy: boolean
+  isMakerGlobal: boolean
+  padding: number[] /* size: 14 */
+}
 /**
  * Holds the data for the {@link FillLog} Account and provides de/serialization
  * functionality for that data
@@ -56,7 +56,7 @@ export class FillLog implements FillLogArgs {
     readonly takerSequenceNumber: beet.bignum,
     readonly takerIsBuy: boolean,
     readonly isMakerGlobal: boolean,
-    readonly padding: number[] /* size: 14 */,
+    readonly padding: number[] /* size: 14 */
   ) {}
 
   /**
@@ -76,8 +76,8 @@ export class FillLog implements FillLogArgs {
       args.takerSequenceNumber,
       args.takerIsBuy,
       args.isMakerGlobal,
-      args.padding,
-    );
+      args.padding
+    )
   }
 
   /**
@@ -86,9 +86,9 @@ export class FillLog implements FillLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [FillLog, number] {
-    return FillLog.deserialize(accountInfo.data, offset);
+    return FillLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -100,16 +100,16 @@ export class FillLog implements FillLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<FillLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find FillLog account at ${address}`);
+      throw new Error(`Unable to find FillLog account at ${address}`)
     }
-    return FillLog.fromAccountInfo(accountInfo, 0)[0];
+    return FillLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -120,10 +120,10 @@ export class FillLog implements FillLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, fillLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, fillLogBeet)
   }
 
   /**
@@ -131,7 +131,7 @@ export class FillLog implements FillLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [FillLog, number] {
-    return fillLogBeet.deserialize(buf, offset);
+    return fillLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -139,7 +139,7 @@ export class FillLog implements FillLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return fillLogBeet.serialize(this);
+    return fillLogBeet.serialize(this)
   }
 
   /**
@@ -147,7 +147,7 @@ export class FillLog implements FillLogArgs {
    * {@link FillLog}
    */
   static get byteSize() {
-    return fillLogBeet.byteSize;
+    return fillLogBeet.byteSize
   }
 
   /**
@@ -158,12 +158,12 @@ export class FillLog implements FillLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       FillLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -171,7 +171,7 @@ export class FillLog implements FillLogArgs {
    * hold {@link FillLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === FillLog.byteSize;
+    return buf.byteLength - offset === FillLog.byteSize
   }
 
   /**
@@ -189,31 +189,31 @@ export class FillLog implements FillLogArgs {
       baseAtoms: this.baseAtoms,
       quoteAtoms: this.quoteAtoms,
       makerSequenceNumber: (() => {
-        const x = <{ toNumber: () => number }>this.makerSequenceNumber;
+        const x = <{ toNumber: () => number }>this.makerSequenceNumber
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
       takerSequenceNumber: (() => {
-        const x = <{ toNumber: () => number }>this.takerSequenceNumber;
+        const x = <{ toNumber: () => number }>this.takerSequenceNumber
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
       takerIsBuy: this.takerIsBuy,
       isMakerGlobal: this.isMakerGlobal,
       padding: this.padding,
-    };
+    }
   }
 }
 
@@ -238,5 +238,5 @@ export const fillLogBeet = new beet.BeetStruct<FillLog, FillLogArgs>(
     ['padding', beet.uniformFixedSizeArray(beet.u8, 14)],
   ],
   FillLog.fromArgs,
-  'FillLog',
-);
+  'FillLog'
+)

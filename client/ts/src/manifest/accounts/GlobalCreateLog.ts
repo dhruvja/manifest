@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
-import * as beet from '@metaplex-foundation/beet';
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
+import * as beet from '@metaplex-foundation/beet'
 
 /**
  * Arguments used to create {@link GlobalCreateLog}
@@ -15,9 +15,9 @@ import * as beet from '@metaplex-foundation/beet';
  * @category generated
  */
 export type GlobalCreateLogArgs = {
-  global: web3.PublicKey;
-  creator: web3.PublicKey;
-};
+  global: web3.PublicKey
+  creator: web3.PublicKey
+}
 /**
  * Holds the data for the {@link GlobalCreateLog} Account and provides de/serialization
  * functionality for that data
@@ -28,14 +28,14 @@ export type GlobalCreateLogArgs = {
 export class GlobalCreateLog implements GlobalCreateLogArgs {
   private constructor(
     readonly global: web3.PublicKey,
-    readonly creator: web3.PublicKey,
+    readonly creator: web3.PublicKey
   ) {}
 
   /**
    * Creates a {@link GlobalCreateLog} instance from the provided args.
    */
   static fromArgs(args: GlobalCreateLogArgs) {
-    return new GlobalCreateLog(args.global, args.creator);
+    return new GlobalCreateLog(args.global, args.creator)
   }
 
   /**
@@ -44,9 +44,9 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [GlobalCreateLog, number] {
-    return GlobalCreateLog.deserialize(accountInfo.data, offset);
+    return GlobalCreateLog.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -58,16 +58,16 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<GlobalCreateLog> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find GlobalCreateLog account at ${address}`);
+      throw new Error(`Unable to find GlobalCreateLog account at ${address}`)
     }
-    return GlobalCreateLog.fromAccountInfo(accountInfo, 0)[0];
+    return GlobalCreateLog.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -78,10 +78,10 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, globalCreateLogBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, globalCreateLogBeet)
   }
 
   /**
@@ -89,7 +89,7 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [GlobalCreateLog, number] {
-    return globalCreateLogBeet.deserialize(buf, offset);
+    return globalCreateLogBeet.deserialize(buf, offset)
   }
 
   /**
@@ -97,7 +97,7 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return globalCreateLogBeet.serialize(this);
+    return globalCreateLogBeet.serialize(this)
   }
 
   /**
@@ -105,7 +105,7 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    * {@link GlobalCreateLog}
    */
   static get byteSize() {
-    return globalCreateLogBeet.byteSize;
+    return globalCreateLogBeet.byteSize
   }
 
   /**
@@ -116,12 +116,12 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       GlobalCreateLog.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -129,7 +129,7 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
    * hold {@link GlobalCreateLog} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === GlobalCreateLog.byteSize;
+    return buf.byteLength - offset === GlobalCreateLog.byteSize
   }
 
   /**
@@ -140,7 +140,7 @@ export class GlobalCreateLog implements GlobalCreateLogArgs {
     return {
       global: this.global.toBase58(),
       creator: this.creator.toBase58(),
-    };
+    }
   }
 }
 
@@ -157,5 +157,5 @@ export const globalCreateLogBeet = new beet.BeetStruct<
     ['creator', beetSolana.publicKey],
   ],
   GlobalCreateLog.fromArgs,
-  'GlobalCreateLog',
-);
+  'GlobalCreateLog'
+)

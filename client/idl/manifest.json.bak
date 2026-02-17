@@ -182,6 +182,30 @@
           "type": {
             "option": "u32"
           }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "DepositParams"
+          }
+        },
+        {
+          "name": "traderIndexHint",
+          "type": {
+            "option": "u32"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "DepositParams"
+          }
+        },
+        {
+          "name": "traderIndexHint",
+          "type": {
+            "option": "u32"
+          }
         }
       ],
       "discriminant": {
@@ -242,6 +266,30 @@
         }
       ],
       "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "WithdrawParams"
+          }
+        },
+        {
+          "name": "traderIndexHint",
+          "type": {
+            "option": "u32"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "WithdrawParams"
+          }
+        },
+        {
+          "name": "traderIndexHint",
+          "type": {
+            "option": "u32"
+          }
+        },
         {
           "name": "params",
           "type": {
@@ -379,6 +427,18 @@
           "type": {
             "defined": "SwapParams"
           }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "SwapParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "SwapParams"
+          }
         }
       ],
       "discriminant": {
@@ -508,6 +568,18 @@
         }
       ],
       "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "SwapParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "SwapParams"
+          }
+        },
         {
           "name": "params",
           "type": {
@@ -678,6 +750,18 @@
           "type": {
             "defined": "BatchUpdateParams"
           }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "BatchUpdateParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "BatchUpdateParams"
+          }
         }
       ],
       "discriminant": {
@@ -835,6 +919,18 @@
           "type": {
             "defined": "GlobalDepositParams"
           }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalDepositParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalDepositParams"
+          }
         }
       ],
       "discriminant": {
@@ -895,6 +991,18 @@
         }
       ],
       "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalWithdrawParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalWithdrawParams"
+          }
+        },
         {
           "name": "params",
           "type": {
@@ -973,6 +1081,18 @@
           "type": {
             "defined": "GlobalEvictParams"
           }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalEvictParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalEvictParams"
+          }
         }
       ],
       "discriminant": {
@@ -1017,6 +1137,18 @@
         }
       ],
       "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalCleanParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "GlobalCleanParams"
+          }
+        },
         {
           "name": "params",
           "type": {
@@ -1156,202 +1288,23 @@
           "type": {
             "defined": "SwapParams"
           }
-        }
-      ],
-      "discriminant": {
-        "type": "u8",
-        "value": 13
-      }
-    },
-    {
-      "name": "DelegateMarket",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": true,
-          "isSigner": true,
-          "docs": [
-            "Payer and market creator"
-          ]
         },
-        {
-          "name": "market",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Market PDA to delegate"
-          ]
-        },
-        {
-          "name": "ownerProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "Manifest program (owner of the PDA)"
-          ]
-        },
-        {
-          "name": "delegationProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "MagicBlock delegation program"
-          ]
-        },
-        {
-          "name": "delegationRecord",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Delegation record PDA"
-          ]
-        },
-        {
-          "name": "delegationMetadata",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Delegation metadata PDA"
-          ]
-        },
-        {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "System program"
-          ]
-        },
-        {
-          "name": "buffer",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Buffer account for delegation"
-          ]
-        }
-      ],
-      "args": [],
-      "discriminant": {
-        "type": "u8",
-        "value": 14
-      }
-    },
-    {
-      "name": "CommitMarket",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": true,
-          "isSigner": true,
-          "docs": [
-            "Payer"
-          ]
-        },
-        {
-          "name": "market",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Delegated market account"
-          ]
-        },
-        {
-          "name": "magicProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "MagicBlock magic program"
-          ]
-        },
-        {
-          "name": "magicContext",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "MagicBlock magic context"
-          ]
-        }
-      ],
-      "args": [],
-      "discriminant": {
-        "type": "u8",
-        "value": 15
-      }
-    },
-    {
-      "name": "Liquidate",
-      "accounts": [
-        {
-          "name": "liquidator",
-          "isMut": true,
-          "isSigner": true,
-          "docs": [
-            "Liquidator"
-          ]
-        },
-        {
-          "name": "market",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Perps market account"
-          ]
-        },
-        {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "System program"
-          ]
-        }
-      ],
-      "args": [
         {
           "name": "params",
           "type": {
-            "defined": "LiquidateParams"
+            "defined": "SwapParams"
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": "SwapParams"
           }
         }
       ],
       "discriminant": {
         "type": "u8",
-        "value": 16
-      }
-    },
-    {
-      "name": "CrankFunding",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": true,
-          "isSigner": true,
-          "docs": [
-            "Payer / cranker"
-          ]
-        },
-        {
-          "name": "market",
-          "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "Perps market account"
-          ]
-        },
-        {
-          "name": "pythPriceFeed",
-          "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "Pyth price feed account"
-          ]
-        }
-      ],
-      "args": [],
-      "discriminant": {
-        "type": "u8",
-        "value": 17
+        "value": 13
       }
     }
   ],
@@ -2295,18 +2248,6 @@
           },
           {
             "name": "ReverseTight"
-          }
-        ]
-      }
-    },
-    {
-      "name": "LiquidateParams",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "traderToLiquidate",
-            "type": "publicKey"
           }
         ]
       }

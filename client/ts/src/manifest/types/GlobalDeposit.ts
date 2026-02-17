@@ -5,14 +5,14 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as web3 from '@solana/web3.js';
-import * as beet from '@metaplex-foundation/beet';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as web3 from '@solana/web3.js'
+import * as beet from '@metaplex-foundation/beet'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 export type GlobalDeposit = {
-  trader: web3.PublicKey;
-  balanceAtoms: beet.bignum;
-  padding: beet.bignum;
-};
+  trader: web3.PublicKey
+  balanceAtoms: beet.bignum
+  padding: beet.bignum
+}
 
 /**
  * @category userTypes
@@ -24,5 +24,5 @@ export const globalDepositBeet = new beet.BeetArgsStruct<GlobalDeposit>(
     ['balanceAtoms', beet.u64],
     ['padding', beet.u64],
   ],
-  'GlobalDeposit',
-);
+  'GlobalDeposit'
+)

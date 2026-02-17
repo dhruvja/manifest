@@ -5,13 +5,13 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type SwapParams = {
-  inAtoms: beet.bignum;
-  outAtoms: beet.bignum;
-  isBaseIn: boolean;
-  isExactIn: boolean;
-};
+  inAtoms: beet.bignum
+  outAtoms: beet.bignum
+  isBaseIn: boolean
+  isExactIn: boolean
+}
 
 /**
  * @category userTypes
@@ -24,5 +24,5 @@ export const swapParamsBeet = new beet.BeetArgsStruct<SwapParams>(
     ['isBaseIn', beet.bool],
     ['isExactIn', beet.bool],
   ],
-  'SwapParams',
-);
+  'SwapParams'
+)

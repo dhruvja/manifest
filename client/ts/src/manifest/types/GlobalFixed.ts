@@ -5,22 +5,22 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 export type GlobalFixed = {
-  discriminant: beet.bignum;
-  mint: web3.PublicKey;
-  vault: web3.PublicKey;
-  globalTradersRootIndex: number;
-  globalDepositsRootIndex: number;
-  globalDepositsMaxIndex: number;
-  freeListHeadIndex: number;
-  numBytesAllocated: number;
-  vaultBump: number;
-  globalBump: number;
-  numSeatsClaimed: number;
-};
+  discriminant: beet.bignum
+  mint: web3.PublicKey
+  vault: web3.PublicKey
+  globalTradersRootIndex: number
+  globalDepositsRootIndex: number
+  globalDepositsMaxIndex: number
+  freeListHeadIndex: number
+  numBytesAllocated: number
+  vaultBump: number
+  globalBump: number
+  numSeatsClaimed: number
+}
 
 /**
  * @category userTypes
@@ -40,5 +40,5 @@ export const globalFixedBeet = new beet.BeetArgsStruct<GlobalFixed>(
     ['globalBump', beet.u8],
     ['numSeatsClaimed', beet.u16],
   ],
-  'GlobalFixed',
-);
+  'GlobalFixed'
+)

@@ -46,6 +46,8 @@ const ER_URL: &str = "https://devnet.magicblock.app";
 const DELEGATION_PROGRAM_ID: &str = "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh";
 /// Pyth V2 SOL/USD devnet price account
 const PYTH_SOL_USD_DEVNET: &str = "J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix";
+/// Pyth PriceUpdateV3 SOL/USD on MagicBlock ER
+const PYTH_SOL_USD_ER: &str = "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu";
 
 // ─── persisted config ────────────────────────────────────────────────────────
 
@@ -304,6 +306,25 @@ enum Commands {
         base_decimals: u8,
     },
 
+    /// Open a leveraged long via the ER. Fetches oracle price automatically.
+    OpenLong {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Leverage multiplier (e.g. 10 for 10x)
+        #[arg(long)]
+        leverage: u32,
+        /// Margin already deposited, in quote atoms (e.g. 5000000 = 5 USDC)
+        #[arg(long)]
+        margin_atoms: u64,
+        /// Quote token decimals (default 6 for USDC)
+        #[arg(long, default_value = "6")]
+        quote_decimals: u8,
+        /// Base token decimals (default 9 for SOL)
+        #[arg(long, default_value = "9")]
+        base_decimals: u8,
+    },
+
     /// Show basic info about a market account
     MarketInfo {
         /// Market PDA address
@@ -456,6 +477,48 @@ fn fetch_pyth_price(
     }
 
     Ok((mantissa as u32, order_expo as i8, price_usd))
+}
+
+/// Parse a live price from a Pyth `PriceUpdateV3` account (used on MagicBlock ER).
+///
+/// Layout: disc(8) + authority(32) + verification_level(1) + PriceFeedMessage
+///   - verification_level 0x01 (Full)    → message starts at byte 41
+///   - verification_level 0x00 (Partial) → byte[41] = num_signatures, message at byte 42
+/// PriceFeedMessage: feed_id(32) + price(8) + conf(8) + expo(4) + ...
+/// The exponent is stored as a positive number of decimal places:
+///   human_price = price / 10^expo
+fn parse_price_v3(data: &[u8]) -> Result<f64> {
+    if data.len() < 93 {
+        return Err(anyhow!("PriceUpdateV3 account too small ({} bytes)", data.len()));
+    }
+    let msg_start: usize = match data[40] {
+        0x01 => 41,
+        0x00 => 42,
+        b    => return Err(anyhow!("Unknown VerificationLevel byte: {:#04x}", b)),
+    };
+    if data.len() < msg_start + 52 {
+        return Err(anyhow!("PriceUpdateV3 truncated at message payload"));
+    }
+    let price = i64::from_le_bytes(data[msg_start + 32..msg_start + 40].try_into().unwrap());
+    let expo  = i32::from_le_bytes(data[msg_start + 48..msg_start + 52].try_into().unwrap());
+    if price <= 0 {
+        return Err(anyhow!("PriceUpdateV3 price non-positive: {price}"));
+    }
+    Ok(price as f64 / 10f64.powi(expo))
+}
+
+/// Fetch live SOL/USD price from the ER oracle (PriceUpdateV3 format).
+/// Returns (mantissa: u32, exponent: i8, price_usd: f64).
+fn fetch_er_price(
+    er_client: &RpcClient,
+    quote_decimals: u8,
+    base_decimals: u8,
+) -> Result<(u32, i8, f64)> {
+    let feed = Pubkey::from_str(PYTH_SOL_USD_ER).unwrap();
+    let data = er_client.get_account_data(&feed)?;
+    let price_usd = parse_price_v3(&data)?;
+    let (m, e) = usd_to_order_price(price_usd, quote_decimals, base_decimals);
+    Ok((m, e, price_usd))
 }
 
 /// Convert a human USD/token price to PlaceOrderParams mantissa+exponent.
@@ -718,6 +781,55 @@ fn cmd_place_order(
     Ok(())
 }
 
+fn cmd_open_long(
+    client: &RpcClient,
+    payer: &Keypair,
+    market: &Pubkey,
+    leverage: u32,
+    margin_atoms: u64,
+    quote_decimals: u8,
+    base_decimals: u8,
+) -> Result<()> {
+    let (price_mantissa, price_exponent, price_usd) =
+        fetch_er_price(client, quote_decimals, base_decimals)?;
+
+    // notional = margin * leverage  (in quote atoms)
+    // base_atoms = notional / price_usd  (accounting for decimal difference)
+    // price_usd is human price (e.g. 139.82). Convert margin from quote atoms to USD:
+    // margin_usd = margin_atoms / 10^quote_decimals
+    // notional_usd = margin_usd * leverage
+    // base_atoms = notional_usd / price_usd * 10^base_decimals
+    let margin_usd = margin_atoms as f64 / 10f64.powi(quote_decimals as i32);
+    let notional_usd = margin_usd * leverage as f64;
+    let base_atoms = (notional_usd / price_usd * 10f64.powi(base_decimals as i32)) as u64;
+
+    println!("Oracle price    : ${price_usd:.4}");
+    println!("Margin          : {margin_atoms} atoms = ${margin_usd:.4}");
+    println!("Leverage        : {leverage}x");
+    println!("Notional        : ${notional_usd:.4}");
+    println!("Order size      : {base_atoms} base atoms");
+    println!("Order price     : {price_mantissa} × 10^{price_exponent}");
+
+    let ix = batch_update_instruction(
+        market,
+        &payer.pubkey(),
+        None,
+        vec![],
+        vec![PlaceOrderParams::new(
+            base_atoms,
+            price_mantissa,
+            price_exponent,
+            true, // bid = long
+            OrderType::ImmediateOrCancel,
+            0,
+        )],
+        None, None, None, None,
+    );
+    let sig = send(client, &[ix], &[payer])?;
+    println!("Signature: {sig}");
+    Ok(())
+}
+
 fn cmd_cancel_order(
     client: &RpcClient,
     payer: &Keypair,
@@ -782,8 +894,14 @@ fn cmd_fetch_price(
     quote_decimals: u8,
     base_decimals: u8,
 ) -> Result<()> {
+    // Try V2 push oracle first; fall back to V3 pull oracle (PriceUpdateV3)
     let (mantissa, exponent, price_usd) =
-        fetch_pyth_price(client, feed, quote_decimals, base_decimals)?;
+        fetch_pyth_price(client, feed, quote_decimals, base_decimals).or_else(|_| {
+            let data = client.get_account_data(feed)?;
+            let price_usd = parse_price_v3(&data)?;
+            let (m, e) = usd_to_order_price(price_usd, quote_decimals, base_decimals);
+            Ok::<_, anyhow::Error>((m, e, price_usd))
+        })?;
     println!("Feed        : {feed}");
     println!("Price (USD) : ${price_usd:.6}");
     println!("Order price : {mantissa} × 10^{exponent}  (quote atoms / base atom)");
@@ -1120,6 +1238,11 @@ fn main() -> Result<()> {
                 .transpose()?
                 .unwrap_or_else(|| parse_pubkey(PYTH_SOL_USD_DEVNET).unwrap());
             cmd_fetch_price(&client, &feed, quote_decimals, base_decimals)?;
+        }
+
+        Commands::OpenLong { market, leverage, margin_atoms, quote_decimals, base_decimals } => {
+            let market = parse_pubkey(&market)?;
+            cmd_open_long(&client, &payer, &market, leverage, margin_atoms, quote_decimals, base_decimals)?;
         }
 
         Commands::MarketInfo { market } => {

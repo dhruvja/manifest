@@ -5,9 +5,9 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import * as web3 from '@solana/web3.js';
-import * as beetSolana from '@metaplex-foundation/beet-solana';
+import * as beet from '@metaplex-foundation/beet'
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 
 /**
  * Arguments used to create {@link BaseAtoms}
@@ -15,8 +15,8 @@ import * as beetSolana from '@metaplex-foundation/beet-solana';
  * @category generated
  */
 export type BaseAtomsArgs = {
-  inner: beet.bignum;
-};
+  inner: beet.bignum
+}
 /**
  * Holds the data for the {@link BaseAtoms} Account and provides de/serialization
  * functionality for that data
@@ -31,7 +31,7 @@ export class BaseAtoms implements BaseAtomsArgs {
    * Creates a {@link BaseAtoms} instance from the provided args.
    */
   static fromArgs(args: BaseAtomsArgs) {
-    return new BaseAtoms(args.inner);
+    return new BaseAtoms(args.inner)
   }
 
   /**
@@ -40,9 +40,9 @@ export class BaseAtoms implements BaseAtomsArgs {
    */
   static fromAccountInfo(
     accountInfo: web3.AccountInfo<Buffer>,
-    offset = 0,
+    offset = 0
   ): [BaseAtoms, number] {
-    return BaseAtoms.deserialize(accountInfo.data, offset);
+    return BaseAtoms.deserialize(accountInfo.data, offset)
   }
 
   /**
@@ -54,16 +54,16 @@ export class BaseAtoms implements BaseAtomsArgs {
   static async fromAccountAddress(
     connection: web3.Connection,
     address: web3.PublicKey,
-    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig,
+    commitmentOrConfig?: web3.Commitment | web3.GetAccountInfoConfig
   ): Promise<BaseAtoms> {
     const accountInfo = await connection.getAccountInfo(
       address,
-      commitmentOrConfig,
-    );
+      commitmentOrConfig
+    )
     if (accountInfo == null) {
-      throw new Error(`Unable to find BaseAtoms account at ${address}`);
+      throw new Error(`Unable to find BaseAtoms account at ${address}`)
     }
-    return BaseAtoms.fromAccountInfo(accountInfo, 0)[0];
+    return BaseAtoms.fromAccountInfo(accountInfo, 0)[0]
   }
 
   /**
@@ -74,10 +74,10 @@ export class BaseAtoms implements BaseAtomsArgs {
    */
   static gpaBuilder(
     programId: web3.PublicKey = new web3.PublicKey(
-      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms',
-    ),
+      'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms'
+    )
   ) {
-    return beetSolana.GpaBuilder.fromStruct(programId, baseAtomsBeet);
+    return beetSolana.GpaBuilder.fromStruct(programId, baseAtomsBeet)
   }
 
   /**
@@ -85,7 +85,7 @@ export class BaseAtoms implements BaseAtomsArgs {
    * @returns a tuple of the account data and the offset up to which the buffer was read to obtain it.
    */
   static deserialize(buf: Buffer, offset = 0): [BaseAtoms, number] {
-    return baseAtomsBeet.deserialize(buf, offset);
+    return baseAtomsBeet.deserialize(buf, offset)
   }
 
   /**
@@ -93,7 +93,7 @@ export class BaseAtoms implements BaseAtomsArgs {
    * @returns a tuple of the created Buffer and the offset up to which the buffer was written to store it.
    */
   serialize(): [Buffer, number] {
-    return baseAtomsBeet.serialize(this);
+    return baseAtomsBeet.serialize(this)
   }
 
   /**
@@ -101,7 +101,7 @@ export class BaseAtoms implements BaseAtomsArgs {
    * {@link BaseAtoms}
    */
   static get byteSize() {
-    return baseAtomsBeet.byteSize;
+    return baseAtomsBeet.byteSize
   }
 
   /**
@@ -112,12 +112,12 @@ export class BaseAtoms implements BaseAtomsArgs {
    */
   static async getMinimumBalanceForRentExemption(
     connection: web3.Connection,
-    commitment?: web3.Commitment,
+    commitment?: web3.Commitment
   ): Promise<number> {
     return connection.getMinimumBalanceForRentExemption(
       BaseAtoms.byteSize,
-      commitment,
-    );
+      commitment
+    )
   }
 
   /**
@@ -125,7 +125,7 @@ export class BaseAtoms implements BaseAtomsArgs {
    * hold {@link BaseAtoms} data.
    */
   static hasCorrectByteSize(buf: Buffer, offset = 0) {
-    return buf.byteLength - offset === BaseAtoms.byteSize;
+    return buf.byteLength - offset === BaseAtoms.byteSize
   }
 
   /**
@@ -135,17 +135,17 @@ export class BaseAtoms implements BaseAtomsArgs {
   pretty() {
     return {
       inner: (() => {
-        const x = <{ toNumber: () => number }>this.inner;
+        const x = <{ toNumber: () => number }>this.inner
         if (typeof x.toNumber === 'function') {
           try {
-            return x.toNumber();
+            return x.toNumber()
           } catch (_) {
-            return x;
+            return x
           }
         }
-        return x;
+        return x
       })(),
-    };
+    }
   }
 }
 
@@ -156,5 +156,5 @@ export class BaseAtoms implements BaseAtomsArgs {
 export const baseAtomsBeet = new beet.BeetStruct<BaseAtoms, BaseAtomsArgs>(
   [['inner', beet.u64]],
   BaseAtoms.fromArgs,
-  'BaseAtoms',
-);
+  'BaseAtoms'
+)

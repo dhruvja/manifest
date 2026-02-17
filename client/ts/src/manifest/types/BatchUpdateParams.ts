@@ -5,14 +5,14 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import { CancelOrderParams, cancelOrderParamsBeet } from './CancelOrderParams';
-import { PlaceOrderParams, placeOrderParamsBeet } from './PlaceOrderParams';
+import * as beet from '@metaplex-foundation/beet'
+import { CancelOrderParams, cancelOrderParamsBeet } from './CancelOrderParams'
+import { PlaceOrderParams, placeOrderParamsBeet } from './PlaceOrderParams'
 export type BatchUpdateParams = {
-  traderIndexHint: beet.COption<number>;
-  cancels: CancelOrderParams[];
-  orders: PlaceOrderParams[];
-};
+  traderIndexHint: beet.COption<number>
+  cancels: CancelOrderParams[]
+  orders: PlaceOrderParams[]
+}
 
 /**
  * @category userTypes
@@ -25,5 +25,5 @@ export const batchUpdateParamsBeet =
       ['cancels', beet.array(cancelOrderParamsBeet)],
       ['orders', beet.array(placeOrderParamsBeet)],
     ],
-    'BatchUpdateParams',
-  );
+    'BatchUpdateParams'
+  )

@@ -10,43 +10,44 @@ import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CrankFunding
  * @category generated
  */
-export const GlobalAddTraderStruct = new beet.BeetArgsStruct<{
+export const CrankFundingStruct = new beet.BeetArgsStruct<{
   instructionDiscriminator: number
-}>([['instructionDiscriminator', beet.u8]], 'GlobalAddTraderInstructionArgs')
+}>([['instructionDiscriminator', beet.u8]], 'CrankFundingInstructionArgs')
 /**
- * Accounts required by the _GlobalAddTrader_ instruction
+ * Accounts required by the _CrankFunding_ instruction
  *
  * @property [_writable_, **signer**] payer
- * @property [_writable_] global
+ * @property [_writable_] market
+ * @property [] pythPriceFeed
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CrankFunding
  * @category generated
  */
-export type GlobalAddTraderInstructionAccounts = {
+export type CrankFundingInstructionAccounts = {
   payer: web3.PublicKey
-  global: web3.PublicKey
-  systemProgram?: web3.PublicKey
+  market: web3.PublicKey
+  pythPriceFeed: web3.PublicKey
 }
 
-export const globalAddTraderInstructionDiscriminator = 8
+export const crankFundingInstructionDiscriminator = 17
 
 /**
- * Creates a _GlobalAddTrader_ instruction.
+ * Creates a _CrankFunding_ instruction.
  *
  * @param accounts that will be accessed while the instruction is processed
  * @category Instructions
- * @category GlobalAddTrader
+ * @category CrankFunding
  * @category generated
  */
-export function createGlobalAddTraderInstruction(
-  accounts: GlobalAddTraderInstructionAccounts,
+export function createCrankFundingInstruction(
+  accounts: CrankFundingInstructionAccounts,
   programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
-  const [data] = GlobalAddTraderStruct.serialize({
-    instructionDiscriminator: globalAddTraderInstructionDiscriminator,
+  const [data] = CrankFundingStruct.serialize({
+    instructionDiscriminator: crankFundingInstructionDiscriminator,
   })
   const keys: web3.AccountMeta[] = [
     {
@@ -55,12 +56,12 @@ export function createGlobalAddTraderInstruction(
       isSigner: true,
     },
     {
-      pubkey: accounts.global,
+      pubkey: accounts.market,
       isWritable: true,
       isSigner: false,
     },
     {
-      pubkey: accounts.systemProgram ?? web3.SystemProgram.programId,
+      pubkey: accounts.pythPriceFeed,
       isWritable: false,
       isSigner: false,
     },

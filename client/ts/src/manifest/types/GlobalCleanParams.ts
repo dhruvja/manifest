@@ -5,10 +5,10 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
+import * as beet from '@metaplex-foundation/beet'
 export type GlobalCleanParams = {
-  orderIndex: number;
-};
+  orderIndex: number
+}
 
 /**
  * @category userTypes
@@ -16,5 +16,5 @@ export type GlobalCleanParams = {
  */
 export const globalCleanParamsBeet = new beet.BeetArgsStruct<GlobalCleanParams>(
   [['orderIndex', beet.u32]],
-  'GlobalCleanParams',
-);
+  'GlobalCleanParams'
+)

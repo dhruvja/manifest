@@ -5,19 +5,19 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as beet from '@metaplex-foundation/beet';
-import { OrderType, orderTypeBeet } from './OrderType';
+import * as beet from '@metaplex-foundation/beet'
+import { OrderType, orderTypeBeet } from './OrderType'
 export type WrapperOpenOrder = {
-  price: beet.bignum;
-  clientOrderId: beet.bignum;
-  orderSequenceNumber: beet.bignum;
-  numBaseAtoms: beet.bignum;
-  marketDataIndex: number;
-  lastValidSlot: number;
-  isBid: boolean;
-  orderType: OrderType;
-  padding: number[] /* size: 30 */;
-};
+  price: beet.bignum
+  clientOrderId: beet.bignum
+  orderSequenceNumber: beet.bignum
+  numBaseAtoms: beet.bignum
+  marketDataIndex: number
+  lastValidSlot: number
+  isBid: boolean
+  orderType: OrderType
+  padding: number[] /* size: 30 */
+}
 
 /**
  * @category userTypes
@@ -35,5 +35,5 @@ export const wrapperOpenOrderBeet = new beet.BeetArgsStruct<WrapperOpenOrder>(
     ['orderType', orderTypeBeet],
     ['padding', beet.uniformFixedSizeArray(beet.u8, 30)],
   ],
-  'WrapperOpenOrder',
-);
+  'WrapperOpenOrder'
+)

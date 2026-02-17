@@ -5,21 +5,18 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
+import * as web3 from '@solana/web3.js'
+import * as beetSolana from '@metaplex-foundation/beet-solana'
 import * as beet from '@metaplex-foundation/beet'
-export type WithdrawParams = {
-  amountAtoms: beet.bignum
-  traderIndexHint: beet.COption<number>
+export type LiquidateParams = {
+  traderToLiquidate: web3.PublicKey
 }
 
 /**
  * @category userTypes
  * @category generated
  */
-export const withdrawParamsBeet =
-  new beet.FixableBeetArgsStruct<WithdrawParams>(
-    [
-      ['amountAtoms', beet.u64],
-      ['traderIndexHint', beet.coption(beet.u32)],
-    ],
-    'WithdrawParams'
-  )
+export const liquidateParamsBeet = new beet.BeetArgsStruct<LiquidateParams>(
+  [['traderToLiquidate', beetSolana.publicKey]],
+  'LiquidateParams'
+)

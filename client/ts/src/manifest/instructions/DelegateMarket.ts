@@ -5,60 +5,58 @@
  * See: https://github.com/metaplex-foundation/solita
  */
 
-import * as splToken from '@solana/spl-token'
 import * as beet from '@metaplex-foundation/beet'
 import * as web3 from '@solana/web3.js'
 
 /**
  * @category Instructions
- * @category CreateMarket
+ * @category DelegateMarket
  * @category generated
  */
-export const CreateMarketStruct = new beet.BeetArgsStruct<{
+export const DelegateMarketStruct = new beet.BeetArgsStruct<{
   instructionDiscriminator: number
-}>([['instructionDiscriminator', beet.u8]], 'CreateMarketInstructionArgs')
+}>([['instructionDiscriminator', beet.u8]], 'DelegateMarketInstructionArgs')
 /**
- * Accounts required by the _CreateMarket_ instruction
+ * Accounts required by the _DelegateMarket_ instruction
  *
  * @property [_writable_, **signer**] payer
  * @property [_writable_] market
- * @property [] baseMint
- * @property [] quoteMint
- * @property [_writable_] baseVault
- * @property [_writable_] quoteVault
- * @property [] tokenProgram22
+ * @property [] ownerProgram
+ * @property [] delegationProgram
+ * @property [_writable_] delegationRecord
+ * @property [_writable_] delegationMetadata
+ * @property [_writable_] buffer
  * @category Instructions
- * @category CreateMarket
+ * @category DelegateMarket
  * @category generated
  */
-export type CreateMarketInstructionAccounts = {
+export type DelegateMarketInstructionAccounts = {
   payer: web3.PublicKey
   market: web3.PublicKey
+  ownerProgram: web3.PublicKey
+  delegationProgram: web3.PublicKey
+  delegationRecord: web3.PublicKey
+  delegationMetadata: web3.PublicKey
   systemProgram?: web3.PublicKey
-  baseMint: web3.PublicKey
-  quoteMint: web3.PublicKey
-  baseVault: web3.PublicKey
-  quoteVault: web3.PublicKey
-  tokenProgram?: web3.PublicKey
-  tokenProgram22: web3.PublicKey
+  buffer: web3.PublicKey
 }
 
-export const createMarketInstructionDiscriminator = 0
+export const delegateMarketInstructionDiscriminator = 14
 
 /**
- * Creates a _CreateMarket_ instruction.
+ * Creates a _DelegateMarket_ instruction.
  *
  * @param accounts that will be accessed while the instruction is processed
  * @category Instructions
- * @category CreateMarket
+ * @category DelegateMarket
  * @category generated
  */
-export function createCreateMarketInstruction(
-  accounts: CreateMarketInstructionAccounts,
+export function createDelegateMarketInstruction(
+  accounts: DelegateMarketInstructionAccounts,
   programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
-  const [data] = CreateMarketStruct.serialize({
-    instructionDiscriminator: createMarketInstructionDiscriminator,
+  const [data] = DelegateMarketStruct.serialize({
+    instructionDiscriminator: delegateMarketInstructionDiscriminator,
   })
   const keys: web3.AccountMeta[] = [
     {
@@ -72,38 +70,33 @@ export function createCreateMarketInstruction(
       isSigner: false,
     },
     {
+      pubkey: accounts.ownerProgram,
+      isWritable: false,
+      isSigner: false,
+    },
+    {
+      pubkey: accounts.delegationProgram,
+      isWritable: false,
+      isSigner: false,
+    },
+    {
+      pubkey: accounts.delegationRecord,
+      isWritable: true,
+      isSigner: false,
+    },
+    {
+      pubkey: accounts.delegationMetadata,
+      isWritable: true,
+      isSigner: false,
+    },
+    {
       pubkey: accounts.systemProgram ?? web3.SystemProgram.programId,
       isWritable: false,
       isSigner: false,
     },
     {
-      pubkey: accounts.baseMint,
-      isWritable: false,
-      isSigner: false,
-    },
-    {
-      pubkey: accounts.quoteMint,
-      isWritable: false,
-      isSigner: false,
-    },
-    {
-      pubkey: accounts.baseVault,
+      pubkey: accounts.buffer,
       isWritable: true,
-      isSigner: false,
-    },
-    {
-      pubkey: accounts.quoteVault,
-      isWritable: true,
-      isSigner: false,
-    },
-    {
-      pubkey: accounts.tokenProgram ?? splToken.TOKEN_PROGRAM_ID,
-      isWritable: false,
-      isSigner: false,
-    },
-    {
-      pubkey: accounts.tokenProgram22,
-      isWritable: false,
       isSigner: false,
     },
   ]

@@ -7,50 +7,71 @@
 
 import * as beet from '@metaplex-foundation/beet'
 import * as web3 from '@solana/web3.js'
+import { LiquidateParams, liquidateParamsBeet } from '../types/LiquidateParams'
 
 /**
  * @category Instructions
- * @category Expand
+ * @category Liquidate
  * @category generated
  */
-export const ExpandStruct = new beet.BeetArgsStruct<{
-  instructionDiscriminator: number
-}>([['instructionDiscriminator', beet.u8]], 'ExpandInstructionArgs')
+export type LiquidateInstructionArgs = {
+  params: LiquidateParams
+}
 /**
- * Accounts required by the _Expand_ instruction
+ * @category Instructions
+ * @category Liquidate
+ * @category generated
+ */
+export const LiquidateStruct = new beet.BeetArgsStruct<
+  LiquidateInstructionArgs & {
+    instructionDiscriminator: number
+  }
+>(
+  [
+    ['instructionDiscriminator', beet.u8],
+    ['params', liquidateParamsBeet],
+  ],
+  'LiquidateInstructionArgs'
+)
+/**
+ * Accounts required by the _Liquidate_ instruction
  *
- * @property [_writable_, **signer**] payer
+ * @property [_writable_, **signer**] liquidator
  * @property [_writable_] market
  * @category Instructions
- * @category Expand
+ * @category Liquidate
  * @category generated
  */
-export type ExpandInstructionAccounts = {
-  payer: web3.PublicKey
+export type LiquidateInstructionAccounts = {
+  liquidator: web3.PublicKey
   market: web3.PublicKey
   systemProgram?: web3.PublicKey
 }
 
-export const expandInstructionDiscriminator = 5
+export const liquidateInstructionDiscriminator = 16
 
 /**
- * Creates a _Expand_ instruction.
+ * Creates a _Liquidate_ instruction.
  *
  * @param accounts that will be accessed while the instruction is processed
+ * @param args to provide as instruction data to the program
+ *
  * @category Instructions
- * @category Expand
+ * @category Liquidate
  * @category generated
  */
-export function createExpandInstruction(
-  accounts: ExpandInstructionAccounts,
+export function createLiquidateInstruction(
+  accounts: LiquidateInstructionAccounts,
+  args: LiquidateInstructionArgs,
   programId = new web3.PublicKey('MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms')
 ) {
-  const [data] = ExpandStruct.serialize({
-    instructionDiscriminator: expandInstructionDiscriminator,
+  const [data] = LiquidateStruct.serialize({
+    instructionDiscriminator: liquidateInstructionDiscriminator,
+    ...args,
   })
   const keys: web3.AccountMeta[] = [
     {
-      pubkey: accounts.payer,
+      pubkey: accounts.liquidator,
       isWritable: true,
       isSigner: true,
     },
