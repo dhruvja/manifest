@@ -187,13 +187,14 @@ pub struct LiquidateLog {
     pub market: Pubkey,
     pub liquidator: Pubkey,
     pub trader: Pubkey,
-    /// Position size as i64 (positive = long, negative = short)
+    /// Original position size (abs value)
     pub position_size: u64,
-    /// Mark price used for settlement
+    /// Mark price used for settlement (quote atoms for full position)
     pub settlement_price: u64,
-    /// PnL as i64 (positive = profit, negative = loss)
+    /// PnL on closed portion as i64 (positive = profit, negative = loss)
     pub pnl: u64,
-    pub _padding: [u8; 8],
+    /// Amount of position closed (base atoms). Equals position_size for full liquidation.
+    pub close_amount: u64,
 }
 
 #[repr(C)]

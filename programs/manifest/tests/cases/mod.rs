@@ -6,6 +6,7 @@ pub mod deposit;
 pub mod global;
 pub mod loaders;
 pub mod matching;
+pub mod perps;
 pub mod place_order;
 pub mod reverse;
 pub mod swap;

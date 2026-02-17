@@ -32,15 +32,20 @@ pub struct CreateMarketParams {
     pub initial_margin_bps: u64,
     pub maintenance_margin_bps: u64,
     pub pyth_feed_account: Pubkey,
+    pub taker_fee_bps: u64,
+    pub liquidation_buffer_bps: u64,
 }
 
 impl CreateMarketParams {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_mint_index: u8,
         base_mint_decimals: u8,
         initial_margin_bps: u64,
         maintenance_margin_bps: u64,
         pyth_feed_account: Pubkey,
+        taker_fee_bps: u64,
+        liquidation_buffer_bps: u64,
     ) -> Self {
         CreateMarketParams {
             base_mint_index,
@@ -48,6 +53,8 @@ impl CreateMarketParams {
             initial_margin_bps,
             maintenance_margin_bps,
             pyth_feed_account,
+            taker_fee_bps,
+            liquidation_buffer_bps,
         }
     }
 }
@@ -213,6 +220,10 @@ pub(crate) fn process_create_market(
 
         // Set the Pyth oracle feed account
         empty_market_fixed.set_pyth_feed(params.pyth_feed_account);
+
+        // Configure insurance fund and liquidation params
+        empty_market_fixed.set_taker_fee_bps(params.taker_fee_bps);
+        empty_market_fixed.set_liquidation_buffer_bps(params.liquidation_buffer_bps);
 
         assert_eq!(market.info.data_len(), size_of::<MarketFixed>());
 

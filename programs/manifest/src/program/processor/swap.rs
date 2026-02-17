@@ -95,6 +95,10 @@ pub(crate) fn process_swap_core(
         }
         let trader_index: DataIndex = dynamic_account.get_trader_index(owner.key);
 
+        // Lazy funding settlement: settle accumulated funding and zero base_balance
+        // before any balance operations. This must happen before get_trader_balance.
+        dynamic_account.settle_funding_for_trader(trader_index)?;
+
         let (initial_base_atoms, initial_quote_atoms) =
             dynamic_account.get_trader_balance(owner.key);
 
@@ -265,6 +269,23 @@ pub(crate) fn process_swap_core(
         )?;
     }
 
+    // Collect taker fee into insurance fund
+    #[cfg(not(feature = "certora"))]
+    {
+        let taker_fee_bps: u64 = dynamic_account.fixed.get_taker_fee_bps();
+        if taker_fee_bps > 0 && quote_atoms_traded.as_u64() > 0 {
+            let fee_amount: u64 = quote_atoms_traded
+                .as_u64()
+                .checked_mul(taker_fee_bps)
+                .unwrap_or(0)
+                / 10000;
+            if fee_amount > 0 {
+                dynamic_account.withdraw(trader_index, fee_amount, false)?;
+                dynamic_account.fixed.add_to_insurance_fund(fee_amount);
+            }
+        }
+    }
+
     let (end_base_atoms, end_quote_atoms) = dynamic_account.get_trader_balance(owner.key);
 
     // Initial margin check: ensure trader has sufficient margin for resulting position
@@ -345,6 +366,9 @@ pub(crate) fn process_swap_core(
         // filled.
         dynamic_account.withdraw(trader_index, extra_base_atoms.as_u64(), true)?;
         dynamic_account.withdraw(trader_index, extra_quote_atoms.as_u64(), false)?;
+
+        // Store current global cumulative funding checkpoint for lazy settlement.
+        dynamic_account.store_cumulative_for_trader(trader_index);
     }
     // Verify that there wasnt a reverse order that took the only spare block.
     require!(

@@ -206,7 +206,13 @@ pub struct MarketFixed {
     #[cfg(feature = "certora")]
     cumulative_funding: u64,
     #[cfg(feature = "certora")]
-    _padding3: [u64; 6],
+    insurance_fund_balance: u64,
+    #[cfg(feature = "certora")]
+    taker_fee_bps: u64,
+    #[cfg(feature = "certora")]
+    liquidation_buffer_bps: u64,
+    #[cfg(feature = "certora")]
+    _padding3: [u64; 3],
 
     /// Initial margin in basis points (e.g., 1000 = 10% = 10x leverage)
     #[cfg(not(feature = "certora"))]
@@ -235,8 +241,17 @@ pub struct MarketFixed {
     /// Cumulative funding per base atom, scaled by 1e9. Stored as u64, interpret as i64.
     #[cfg(not(feature = "certora"))]
     cumulative_funding: u64,
+    /// Insurance fund balance (virtual USDC ledger for bad debt coverage)
     #[cfg(not(feature = "certora"))]
-    _padding3: [u64; 8],
+    insurance_fund_balance: u64,
+    /// Taker fee in basis points (e.g., 5 = 0.05%)
+    #[cfg(not(feature = "certora"))]
+    taker_fee_bps: u64,
+    /// Buffer above maintenance margin to target after partial liquidation (basis points)
+    #[cfg(not(feature = "certora"))]
+    liquidation_buffer_bps: u64,
+    #[cfg(not(feature = "certora"))]
+    _padding3: [u64; 5],
 }
 const_assert_eq!(
     size_of::<MarketFixed>(),
@@ -310,7 +325,13 @@ impl MarketFixed {
             #[cfg(not(feature = "certora"))]
             cumulative_funding: 0,
             #[cfg(not(feature = "certora"))]
-            _padding3: [0; 8],
+            insurance_fund_balance: 0,
+            #[cfg(not(feature = "certora"))]
+            taker_fee_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            liquidation_buffer_bps: 0,
+            #[cfg(not(feature = "certora"))]
+            _padding3: [0; 5],
             #[cfg(feature = "certora")]
             withdrawable_base_atoms: BaseAtoms::new(0),
             #[cfg(feature = "certora")]
@@ -334,7 +355,13 @@ impl MarketFixed {
             #[cfg(feature = "certora")]
             cumulative_funding: 0,
             #[cfg(feature = "certora")]
-            _padding3: [0; 6],
+            insurance_fund_balance: 0,
+            #[cfg(feature = "certora")]
+            taker_fee_bps: 0,
+            #[cfg(feature = "certora")]
+            liquidation_buffer_bps: 0,
+            #[cfg(feature = "certora")]
+            _padding3: [0; 3],
         }
     }
 
@@ -372,7 +399,10 @@ impl MarketFixed {
             oracle_price_expo_and_pad: 0,
             last_funding_timestamp: 0,
             cumulative_funding: 0,
-            _padding3: [0; 6],
+            insurance_fund_balance: 0,
+            taker_fee_bps: 0,
+            liquidation_buffer_bps: 0,
+            _padding3: [0; 3],
         }
     }
 
@@ -489,6 +519,34 @@ impl MarketFixed {
     }
     pub fn set_cumulative_funding(&mut self, val: i64) {
         self.cumulative_funding = val as u64;
+    }
+
+    pub fn get_insurance_fund_balance(&self) -> u64 {
+        self.insurance_fund_balance
+    }
+    pub fn set_insurance_fund_balance(&mut self, val: u64) {
+        self.insurance_fund_balance = val;
+    }
+    pub fn add_to_insurance_fund(&mut self, amount: u64) {
+        self.insurance_fund_balance = self.insurance_fund_balance.saturating_add(amount);
+    }
+    /// Draw from insurance fund, returns the amount actually drawn (capped by balance).
+    pub fn draw_from_insurance_fund(&mut self, amount: u64) -> u64 {
+        let drawn = amount.min(self.insurance_fund_balance);
+        self.insurance_fund_balance = self.insurance_fund_balance.saturating_sub(drawn);
+        drawn
+    }
+    pub fn get_taker_fee_bps(&self) -> u64 {
+        self.taker_fee_bps
+    }
+    pub fn set_taker_fee_bps(&mut self, val: u64) {
+        self.taker_fee_bps = val;
+    }
+    pub fn get_liquidation_buffer_bps(&self) -> u64 {
+        self.liquidation_buffer_bps
+    }
+    pub fn set_liquidation_buffer_bps(&mut self, val: u64) {
+        self.liquidation_buffer_bps = val;
     }
 }
 
@@ -847,6 +905,22 @@ impl<Fixed: DerefOrBorrow<MarketFixed>, Dynamic: DerefOrBorrow<[u8]>>
         claimed_seat.quote_volume
     }
 
+    /// Get the trader's perps position: (position_size as i64, quote_cost_basis as u64)
+    pub fn get_trader_position(&self, trader: &Pubkey) -> (i64, u64) {
+        let DynamicAccount { fixed, dynamic } = self.borrow_market();
+
+        let claimed_seats_tree: ClaimedSeatTreeReadOnly =
+            ClaimedSeatTreeReadOnly::new(dynamic, fixed.claimed_seats_root_index, NIL);
+        let trader_index: DataIndex =
+            claimed_seats_tree.lookup_index(&ClaimedSeat::new_empty(*trader));
+        let claimed_seat: &ClaimedSeat = get_helper_seat(dynamic, trader_index).get_value();
+
+        (
+            claimed_seat.get_position_size(),
+            claimed_seat.get_quote_cost_basis(),
+        )
+    }
+
     pub fn get_bids(&self) -> BooksideReadOnly {
         let DynamicAccount { dynamic, fixed } = self.borrow_market();
         BooksideReadOnly::new(
@@ -1043,6 +1117,63 @@ impl<
         let DynamicAccount { fixed, dynamic } = self.borrow_mut();
         update_balance(fixed, dynamic, trader_index, is_base, false, amount_atoms)?;
         Ok(())
+    }
+
+    /// Funding rate scaling factor (1e9). Shared with crank_funding.
+    const FUNDING_SCALE: i64 = 1_000_000_000;
+
+    /// Settle accumulated funding for a trader using lazy cumulative approach.
+    ///
+    /// Reads the trader's `last_cumulative_funding` (stored in base_withdrawable_balance),
+    /// computes the funding owed based on position_size and the delta from the global
+    /// cumulative rate, adjusts quote margin, and zeroes base_withdrawable_balance
+    /// (preparing it for the matching engine's virtual base operations).
+    ///
+    /// Must be called at the START of any user interaction (swap, batch_update,
+    /// liquidate, deposit, withdraw) before any base balance operations.
+    pub fn settle_funding_for_trader(&mut self, trader_index: DataIndex) -> ProgramResult {
+        let DynamicAccount { fixed, dynamic } = self.borrow_mut();
+        let claimed_seat: &mut ClaimedSeat =
+            get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+
+        let position_size: i64 = claimed_seat.get_position_size();
+        if position_size != 0 {
+            let global_cumulative: i64 = fixed.get_cumulative_funding();
+            let last_cumulative: i64 = claimed_seat.get_last_cumulative_funding();
+            let delta: i64 = global_cumulative.wrapping_sub(last_cumulative);
+
+            if delta != 0 {
+                // funding_owed = position_size * delta / FUNDING_SCALE
+                // Longs pay positive funding, shorts receive positive funding
+                let funding_owed: i64 = ((position_size as i128 * delta as i128)
+                    / Self::FUNDING_SCALE as i128) as i64;
+
+                let current_margin: u64 = claimed_seat.quote_withdrawable_balance.as_u64();
+                let new_margin: u64 = if funding_owed >= 0 {
+                    current_margin.saturating_sub(funding_owed as u64)
+                } else {
+                    current_margin.saturating_add(funding_owed.unsigned_abs())
+                };
+                claimed_seat.quote_withdrawable_balance = QuoteAtoms::new(new_margin);
+            }
+        }
+
+        // Zero base_withdrawable_balance for matching engine (base is virtual in perps).
+        // The cumulative funding value was consumed above.
+        claimed_seat.base_withdrawable_balance = BaseAtoms::new(0);
+        Ok(())
+    }
+
+    /// Store the current global cumulative funding rate into the trader's seat.
+    ///
+    /// Must be called at the END of any user interaction, after all matching
+    /// engine operations are complete, to persist the funding checkpoint.
+    pub fn store_cumulative_for_trader(&mut self, trader_index: DataIndex) {
+        let DynamicAccount { fixed, dynamic } = self.borrow_mut();
+        let global_cumulative: i64 = fixed.get_cumulative_funding();
+        let claimed_seat: &mut ClaimedSeat =
+            get_mut_helper_seat(dynamic, trader_index).get_mut_value();
+        claimed_seat.set_last_cumulative_funding(global_cumulative);
     }
 
     pub fn place_order_(
@@ -1260,18 +1391,19 @@ impl<
             }
 
             // Increase maker from the matched amount in the trade.
-            update_balance(
-                fixed,
-                dynamic,
-                maker_trader_index,
-                !is_bid,
-                true,
-                if is_bid {
-                    quote_atoms_traded.into()
-                } else {
-                    base_atoms_traded.into()
-                },
-            )?;
+            // In perps, only credit quote to maker. Skip base credits since base
+            // is virtual and base_withdrawable_balance stores cumulative funding.
+            // Position tracking is handled by update_perps_position below.
+            if is_bid {
+                update_balance(
+                    fixed,
+                    dynamic,
+                    maker_trader_index,
+                    false, // quote side
+                    true,
+                    quote_atoms_traded.into(),
+                )?;
+            }
             // Decrease taker
             update_balance(
                 fixed,
@@ -1460,20 +1592,21 @@ impl<
                         set_payload_order(dynamic, free_address);
                     }
 
-                    update_balance(
-                        fixed,
-                        dynamic,
-                        maker_trader_index,
-                        !is_bid,
-                        false,
-                        if is_bid {
+                    // Reserve tokens for the reverse order.
+                    // In perps, skip base deductions (base is virtual and
+                    // base_withdrawable_balance stores cumulative funding).
+                    if is_bid {
+                        update_balance(
+                            fixed,
+                            dynamic,
+                            maker_trader_index,
+                            false, // quote side (is_bid=true → !is_bid=false)
+                            false,
                             num_base_atoms_reverse
                                 .checked_mul(price_reverse, true)?
-                                .into()
-                        } else {
-                            num_base_atoms_reverse.into()
-                        },
-                    )?;
+                                .into(),
+                        )?;
+                    }
                 }
             }
 
@@ -1719,7 +1852,8 @@ impl<
             // verification does not cause failures.
             #[cfg(feature = "certora")]
             return Ok(());
-        } else {
+        } else if is_bid {
+            // For bids: return quote atoms to the trader's balance.
             update_balance(
                 fixed,
                 dynamic,
@@ -1729,6 +1863,9 @@ impl<
                 amount_atoms,
             )?;
         }
+        // For asks: do NOT return base atoms. Base is virtual in perps,
+        // and base_withdrawable_balance is repurposed for cumulative funding tracking.
+        // The virtual base atoms were meaningless accounting artifacts.
         remove_order_from_tree_and_free(fixed, dynamic, order_index, is_bid)?;
 
         Ok(())
@@ -2086,19 +2223,12 @@ fn remove_and_update_balances(
         } else {
             remove_from_global(&global_trade_accounts_opts[0])?;
         }
-    } else {
-        // Return the exact number of atoms if the resting order is an
-        // ask. If the resting order is bid, multiply by price and round
-        // in favor of the taker which here means up. The maker places
-        // the minimum number of atoms required.
-        let amount_atoms_to_return: u64 = if order_to_remove_is_bid {
-            resting_order_to_remove
-                .get_price()
-                .checked_quote_for_base(resting_order_to_remove.get_num_base_atoms(), true)?
-                .as_u64()
-        } else {
-            resting_order_to_remove.get_num_base_atoms().as_u64()
-        };
+    } else if order_to_remove_is_bid {
+        // For bids: return quote atoms to the trader's balance.
+        let amount_atoms_to_return: u64 = resting_order_to_remove
+            .get_price()
+            .checked_quote_for_base(resting_order_to_remove.get_num_base_atoms(), true)?
+            .as_u64();
         update_balance(
             fixed,
             dynamic,
@@ -2108,6 +2238,8 @@ fn remove_and_update_balances(
             amount_atoms_to_return,
         )?;
     }
+    // For asks: do NOT return base atoms. Base is virtual in perps,
+    // and base_withdrawable_balance is repurposed for cumulative funding tracking.
     remove_order_from_tree_and_free(
         fixed,
         dynamic,

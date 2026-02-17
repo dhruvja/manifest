@@ -100,7 +100,7 @@ impl TestFixture {
         let payer: Keypair = context.borrow().payer.insecure_clone();
         let (market_key, _) = get_market_address(0, &usdc_mint_f.key);
         let create_market_ixs: Vec<Instruction> =
-            create_market_instructions(0, 9, &usdc_mint_f.key, &payer_pubkey, 1000, 500, Pubkey::default());
+            create_market_instructions(0, 9, &usdc_mint_f.key, &payer_pubkey, 1000, 500, Pubkey::default(), 0, 200);
 
         send_tx_with_retry(
             Rc::clone(&context),
@@ -194,7 +194,7 @@ impl TestFixture {
         let payer: Keypair = context.borrow().payer.insecure_clone();
         let (market_key, _) = get_market_address(0, &usdc_mint_f.key);
         let create_market_ixs: Vec<Instruction> =
-            create_market_instructions(0, 9, &usdc_mint_f.key, &payer_pubkey, 1000, 500, Pubkey::default());
+            create_market_instructions(0, 9, &usdc_mint_f.key, &payer_pubkey, 1000, 500, Pubkey::default(), 0, 200);
 
         send_tx_with_retry(
             Rc::clone(&context),

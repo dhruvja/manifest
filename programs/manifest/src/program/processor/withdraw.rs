@@ -92,6 +92,11 @@ pub(crate) fn process_withdraw_core(
 
     let trader_index: DataIndex =
         get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
+
+    // Lazy funding settlement before withdrawal + equity check.
+    // This ensures margin reflects accumulated funding accurately.
+    dynamic_account.settle_funding_for_trader(trader_index)?;
+
     // is_base = false: always withdrawing quote in perps
     dynamic_account.withdraw(trader_index, amount_atoms, false)?;
 
@@ -142,6 +147,9 @@ pub(crate) fn process_withdraw_core(
             )?;
         }
     }
+
+    // Store current global cumulative funding checkpoint.
+    dynamic_account.store_cumulative_for_trader(trader_index);
 
     emit_stack(WithdrawLog {
         market: *market.key,

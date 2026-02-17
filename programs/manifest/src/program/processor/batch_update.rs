@@ -241,6 +241,10 @@ pub(crate) fn process_batch_update_core(
         let trader_index: DataIndex =
             get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
 
+        // Lazy funding settlement: settle accumulated funding and zero base_balance
+        // before any cancel or place operations.
+        dynamic_account.settle_funding_for_trader(trader_index)?;
+
         for cancel_order_params in cancels {
             // Hinted is preferred because that is O(1) to find and O(log n) to
             // remove. Without the hint, we lookup by order_sequence_number and
@@ -350,8 +354,26 @@ pub(crate) fn process_batch_update_core(
             let AddOrderToMarketResult {
                 order_index,
                 order_sequence_number,
+                quote_atoms_traded,
                 ..
             } = add_order_to_market_result;
+
+            // Collect taker fee into insurance fund
+            #[cfg(not(feature = "certora"))]
+            {
+                let taker_fee_bps: u64 = dynamic_account.fixed.get_taker_fee_bps();
+                if taker_fee_bps > 0 && quote_atoms_traded.as_u64() > 0 {
+                    let fee_amount: u64 = quote_atoms_traded
+                        .as_u64()
+                        .checked_mul(taker_fee_bps)
+                        .unwrap_or(0)
+                        / 10000;
+                    if fee_amount > 0 {
+                        dynamic_account.withdraw(trader_index, fee_amount, false)?;
+                        dynamic_account.fixed.add_to_insurance_fund(fee_amount);
+                    }
+                }
+            }
 
             // Initial margin check after order placement
             #[cfg(not(feature = "certora"))]
@@ -414,6 +436,13 @@ pub(crate) fn process_batch_update_core(
             result.push((order_sequence_number, order_index));
         }
         expand_market_if_needed(&payer, &market)?;
+    }
+
+    // Store current global cumulative funding checkpoint for lazy settlement.
+    {
+        let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
+        let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
+        dynamic_account.store_cumulative_for_trader(trader_index);
     }
 
     // Formal verification does not cover return values.

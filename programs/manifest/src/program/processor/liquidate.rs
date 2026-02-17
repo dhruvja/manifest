@@ -14,7 +14,7 @@ use solana_program::{
 };
 use std::cell::RefMut;
 
-/// Liquidator reward in basis points (2.5%)
+/// Liquidator reward in basis points of closed notional (2.5%)
 const LIQUIDATOR_REWARD_BPS: u64 = 250;
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -55,6 +55,10 @@ pub(crate) fn process_liquidate(
         "Trader not found on market",
     )?;
 
+    // Lazy funding settlement for the trader being liquidated.
+    // Must happen before reading margin/position to ensure accurate equity computation.
+    dynamic_account.settle_funding_for_trader(trader_index)?;
+
     let claimed_seat: &ClaimedSeat = get_helper::<RBNode<ClaimedSeat>>(
         &dynamic_account.dynamic,
         trader_index,
@@ -69,14 +73,12 @@ pub(crate) fn process_liquidate(
     )?;
 
     let quote_cost_basis: u64 = claimed_seat.get_quote_cost_basis();
-    let margin_balance: u64 = claimed_seat.quote_withdrawable_balance.as_u64();
 
     // Cancel all open orders belonging to this trader before computing mark price
     // This releases reserved funds back to the trader's balance
     {
         let no_global_accounts: [Option<GlobalTradeAccounts>; 2] = [None, None];
 
-        // Collect order indices from bids
         let bid_indices: Vec<DataIndex> = dynamic_account
             .get_bids()
             .iter::<RestingOrder>()
@@ -84,7 +86,6 @@ pub(crate) fn process_liquidate(
             .map(|(index, _)| index)
             .collect();
 
-        // Collect order indices from asks
         let ask_indices: Vec<DataIndex> = dynamic_account
             .get_asks()
             .iter::<RestingOrder>()
@@ -92,7 +93,6 @@ pub(crate) fn process_liquidate(
             .map(|(index, _)| index)
             .collect();
 
-        // Cancel all collected orders
         for order_index in bid_indices.iter().chain(ask_indices.iter()) {
             dynamic_account.cancel_order_by_index(*order_index, &no_global_accounts)?;
         }
@@ -142,11 +142,100 @@ pub(crate) fn process_liquidate(
         required_maintenance,
     )?;
 
-    // Liquidate: settle position at mark price
-    let settlement_pnl: i64 = unrealized_pnl;
+    // --- Determine close amount: partial vs full liquidation ---
+    //
+    // After closing fraction f of position at mark price:
+    //   new_equity = equity - f * current_value * REWARD_BPS / 10000
+    //   new_notional = (1 - f) * current_value
+    //   Target: new_equity >= new_notional * target_bps / 10000
+    //
+    // Solving: f = (target_bps - equity_bps) / (target_bps - REWARD_BPS)
+    //   where equity_bps = equity * 10000 / current_value
+    let liquidation_buffer_bps: u64 = dynamic_account.fixed.get_liquidation_buffer_bps();
+    let target_bps: i128 = (maintenance_margin_bps + liquidation_buffer_bps) as i128;
 
-    // Update the trader's seat: close position, settle PnL, deduct liquidator reward
-    let liquidator_reward: u64;
+    let close_amount: u64 = if current_value == 0 {
+        abs_position
+    } else {
+        let equity_bps: i128 = equity * 10000 / current_value as i128;
+        let reward_bps: i128 = LIQUIDATOR_REWARD_BPS as i128;
+
+        let f_numerator: i128 = target_bps - equity_bps;
+        let f_denominator: i128 = target_bps - reward_bps;
+
+        if f_denominator <= 0 || f_numerator <= 0 {
+            // f_denominator <= 0: target_bps <= reward_bps (unusual config), do full
+            // f_numerator <= 0: equity already above target after order cancel, do full
+            if equity < required_maintenance as i128 {
+                abs_position
+            } else {
+                0 // Orders being cancelled was enough
+            }
+        } else {
+            // f = f_numerator / f_denominator, close_amount = ceil(f * abs_position)
+            let close: u128 = (f_numerator as u128 * abs_position as u128
+                + f_denominator as u128
+                - 1)
+                / f_denominator as u128;
+            (close.min(abs_position as u128)) as u64
+        }
+    };
+
+    // If close_amount is 0, orders being cancelled was sufficient
+    if close_amount == 0 {
+        return Ok(());
+    }
+
+    let is_full_liquidation: bool = close_amount >= abs_position;
+
+    // Proportional cost basis for the closed portion
+    let closed_cost_basis: u64 = if is_full_liquidation {
+        quote_cost_basis
+    } else {
+        ((quote_cost_basis as u128 * close_amount as u128) / abs_position as u128) as u64
+    };
+
+    // Compute notional of the closed portion
+    let closed_notional: u64 = mark_price
+        .checked_quote_for_base(BaseAtoms::new(close_amount), false)?
+        .as_u64();
+
+    // PnL on the closed portion
+    let closed_pnl: i64 = if position_size > 0 {
+        (closed_notional as i64).wrapping_sub(closed_cost_basis as i64)
+    } else {
+        (closed_cost_basis as i64).wrapping_sub(closed_notional as i64)
+    };
+
+    // Liquidator reward = % of closed notional (always incentivizes liquidation)
+    let liquidator_reward: u64 = closed_notional
+        .checked_mul(LIQUIDATOR_REWARD_BPS)
+        .unwrap_or(0)
+        / 10000;
+
+    // Settlement: apply PnL to margin, deduct reward
+    let margin_after_pnl: i128 = margin_balance as i128 + closed_pnl as i128;
+    let margin_after_reward: i128 = margin_after_pnl - liquidator_reward as i128;
+
+    // Insurance fund draw: if margin goes negative, there's bad debt
+    let (final_trader_margin, actual_liquidator_reward) = if margin_after_reward >= 0 {
+        (margin_after_reward as u64, liquidator_reward)
+    } else {
+        // Bad debt scenario
+        let deficit: u64 = (-margin_after_reward) as u64;
+        let drawn = dynamic_account.fixed.draw_from_insurance_fund(deficit);
+        if drawn >= deficit {
+            // Insurance fund fully covers the deficit
+            (0u64, liquidator_reward)
+        } else {
+            // Insurance fund insufficient; reduce liquidator reward
+            let remaining_deficit = deficit - drawn;
+            let adjusted_reward = liquidator_reward.saturating_sub(remaining_deficit);
+            (0u64, adjusted_reward)
+        }
+    };
+
+    // Update trader's seat
     {
         let claimed_seat_mut: &mut ClaimedSeat = get_mut_helper::<RBNode<ClaimedSeat>>(
             &mut dynamic_account.dynamic,
@@ -154,29 +243,26 @@ pub(crate) fn process_liquidate(
         )
         .get_mut_value();
 
-        // Close position
-        claimed_seat_mut.set_position_size(0);
-        claimed_seat_mut.set_quote_cost_basis(0);
-
-        // Settle PnL into margin balance
-        let settled_margin = if settlement_pnl >= 0 {
-            margin_balance.saturating_add(settlement_pnl as u64)
+        if is_full_liquidation {
+            claimed_seat_mut.set_position_size(0);
+            claimed_seat_mut.set_quote_cost_basis(0);
         } else {
-            margin_balance.saturating_sub(settlement_pnl.unsigned_abs())
-        };
+            let new_position: i64 = if position_size > 0 {
+                position_size - close_amount as i64
+            } else {
+                position_size + close_amount as i64
+            };
+            claimed_seat_mut.set_position_size(new_position);
+            claimed_seat_mut.set_quote_cost_basis(
+                quote_cost_basis.saturating_sub(closed_cost_basis),
+            );
+        }
 
-        // Compute liquidator reward from remaining margin
-        liquidator_reward = settled_margin
-            .checked_mul(LIQUIDATOR_REWARD_BPS)
-            .unwrap_or(0)
-            / 10000;
-
-        claimed_seat_mut.quote_withdrawable_balance =
-            QuoteAtoms::new(settled_margin.saturating_sub(liquidator_reward));
+        claimed_seat_mut.quote_withdrawable_balance = QuoteAtoms::new(final_trader_margin);
     }
 
     // Credit liquidator reward (liquidator must have a seat)
-    if liquidator_reward > 0 {
+    if actual_liquidator_reward > 0 {
         let liquidator_index: DataIndex = dynamic_account.get_trader_index(liquidator.key);
         if liquidator_index != hypertree::NIL {
             let liquidator_seat: &mut ClaimedSeat =
@@ -187,7 +273,7 @@ pub(crate) fn process_liquidate(
                 .get_mut_value();
             let current = liquidator_seat.quote_withdrawable_balance.as_u64();
             liquidator_seat.quote_withdrawable_balance =
-                QuoteAtoms::new(current.saturating_add(liquidator_reward));
+                QuoteAtoms::new(current.saturating_add(actual_liquidator_reward));
         }
     }
 
@@ -198,12 +284,21 @@ pub(crate) fn process_liquidate(
             let current = dynamic_account.fixed.get_total_long_base_atoms();
             dynamic_account
                 .fixed
-                .set_total_long_base_atoms(current.saturating_sub(abs_position));
+                .set_total_long_base_atoms(current.saturating_sub(close_amount));
         } else {
             let current = dynamic_account.fixed.get_total_short_base_atoms();
             dynamic_account
                 .fixed
-                .set_total_short_base_atoms(current.saturating_sub(abs_position));
+                .set_total_short_base_atoms(current.saturating_sub(close_amount));
+        }
+    }
+
+    // Store current global cumulative funding checkpoint for both trader and liquidator.
+    dynamic_account.store_cumulative_for_trader(trader_index);
+    {
+        let liquidator_index: DataIndex = dynamic_account.get_trader_index(liquidator.key);
+        if liquidator_index != hypertree::NIL {
+            dynamic_account.store_cumulative_for_trader(liquidator_index);
         }
     }
 
@@ -211,10 +306,10 @@ pub(crate) fn process_liquidate(
         market: *market.key,
         liquidator: *liquidator.key,
         trader: params.trader_to_liquidate,
-        position_size: position_size as u64,
+        position_size: abs_position,
         settlement_price: current_value,
-        pnl: settlement_pnl as u64,
-        _padding: [0; 8],
+        pnl: closed_pnl as u64,
+        close_amount,
     })?;
 
     Ok(())

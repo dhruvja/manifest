@@ -64,6 +64,18 @@ impl ClaimedSeat {
     pub fn set_quote_cost_basis(&mut self, cost_basis: u64) {
         self._padding = cost_basis.to_le_bytes();
     }
+
+    /// Get last cumulative funding rate snapshot for lazy settlement.
+    /// Stored in `base_withdrawable_balance` (reinterpreted as i64), since
+    /// base is virtual in perps and this field is unused between transactions.
+    pub fn get_last_cumulative_funding(&self) -> i64 {
+        self.base_withdrawable_balance.as_u64() as i64
+    }
+
+    /// Set last cumulative funding rate snapshot.
+    pub fn set_last_cumulative_funding(&mut self, val: i64) {
+        self.base_withdrawable_balance = BaseAtoms::new(val as u64);
+    }
 }
 
 #[cfg(feature = "certora")]

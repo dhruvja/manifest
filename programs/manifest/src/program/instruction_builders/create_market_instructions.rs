@@ -11,6 +11,7 @@ use solana_program::{
 
 /// Creates a market at the PDA derived from base_mint_index and quote mint.
 /// The market account is created inside the program via invoke_signed.
+#[allow(clippy::too_many_arguments)]
 pub fn create_market_instructions(
     base_mint_index: u8,
     base_mint_decimals: u8,
@@ -19,6 +20,8 @@ pub fn create_market_instructions(
     initial_margin_bps: u64,
     maintenance_margin_bps: u64,
     pyth_feed_account: Pubkey,
+    taker_fee_bps: u64,
+    liquidation_buffer_bps: u64,
 ) -> Vec<Instruction> {
     let (market, _) = get_market_address(base_mint_index, quote_mint);
     vec![create_market_instruction(
@@ -30,6 +33,8 @@ pub fn create_market_instructions(
         initial_margin_bps,
         maintenance_margin_bps,
         pyth_feed_account,
+        taker_fee_bps,
+        liquidation_buffer_bps,
     )]
 }
 
@@ -43,6 +48,8 @@ pub fn create_market_instruction(
     initial_margin_bps: u64,
     maintenance_margin_bps: u64,
     pyth_feed_account: Pubkey,
+    taker_fee_bps: u64,
+    liquidation_buffer_bps: u64,
 ) -> Instruction {
     let (quote_vault, _) = get_vault_address(market, quote_mint);
     Instruction {
@@ -50,9 +57,9 @@ pub fn create_market_instruction(
         accounts: vec![
             AccountMeta::new(*market_creator, true),
             AccountMeta::new(*market, false),
+            AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(*quote_mint, false),
             AccountMeta::new(quote_vault, false),
-            AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(spl_token::id(), false),
             AccountMeta::new_readonly(spl_token_2022::id(), false),
         ],
@@ -64,6 +71,8 @@ pub fn create_market_instruction(
                 initial_margin_bps,
                 maintenance_margin_bps,
                 pyth_feed_account,
+                taker_fee_bps,
+                liquidation_buffer_bps,
             )
             .try_to_vec()
             .unwrap(),

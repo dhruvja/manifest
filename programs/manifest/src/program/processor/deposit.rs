@@ -82,8 +82,15 @@ pub(crate) fn process_deposit_core(
 
     let trader_index: DataIndex =
         get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
+
+    // Lazy funding settlement before any balance operations.
+    dynamic_account.settle_funding_for_trader(trader_index)?;
+
     // is_base = false: always depositing quote in perps
     dynamic_account.deposit(trader_index, deposited_amount_atoms, false)?;
+
+    // Store current global cumulative funding checkpoint.
+    dynamic_account.store_cumulative_for_trader(trader_index);
 
     emit_stack(DepositLog {
         market: *market.key,

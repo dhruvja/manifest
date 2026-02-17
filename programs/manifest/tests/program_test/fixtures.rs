@@ -227,6 +227,192 @@ impl TestFixture {
         Ok(test_fixture)
     }
 
+    /// Create a test fixture for perps testing: claims seats and deposits USDC only (no SOL).
+    pub async fn try_new_for_perps_test(
+        usdc_amount: u64,
+    ) -> anyhow::Result<TestFixture, BanksClientError> {
+        let mut test_fixture = TestFixture::new().await;
+        let second_keypair = test_fixture.second_keypair.insecure_clone();
+
+        test_fixture.claim_seat().await?;
+        test_fixture.deposit(Token::USDC, usdc_amount).await?;
+
+        test_fixture
+            .claim_seat_for_keypair(&second_keypair)
+            .await?;
+        test_fixture
+            .deposit_for_keypair(Token::USDC, usdc_amount, &second_keypair)
+            .await?;
+        Ok(test_fixture)
+    }
+
+    /// Create a test fixture with a mock Pyth oracle account injected before context start.
+    pub async fn new_with_pyth(
+        pyth_key: Pubkey,
+        pyth_data: Vec<u8>,
+        initial_margin_bps: u64,
+        maintenance_margin_bps: u64,
+    ) -> TestFixture {
+        Self::new_with_pyth_and_fees(pyth_key, pyth_data, initial_margin_bps, maintenance_margin_bps, 0, 200).await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn new_with_pyth_and_fees(
+        pyth_key: Pubkey,
+        pyth_data: Vec<u8>,
+        initial_margin_bps: u64,
+        maintenance_margin_bps: u64,
+        taker_fee_bps: u64,
+        liquidation_buffer_bps: u64,
+    ) -> TestFixture {
+        use manifest::program::crank_funding_instruction::crank_funding_instruction;
+
+        let mut program: ProgramTest = ProgramTest::new(
+            "manifest",
+            manifest::ID,
+            processor!(manifest::process_instruction),
+        );
+
+        let second_keypair: Keypair = Keypair::new();
+        program.add_account(
+            second_keypair.pubkey(),
+            solana_sdk::account::Account::new(
+                u32::MAX as u64,
+                0,
+                &solana_sdk::system_program::id(),
+            ),
+        );
+
+        // Add testdata for the reverse coalesce test.
+        for pk in [
+            "ENhU8LsaR7vDD2G1CsWcsuSGNrih9Cv5WZEk7q9kPapQ",
+            "AKjfJDv4ywdpCDrj7AURuNkGA3696GTVFgrMwk4TjkKs",
+            "FN9K6rTdWtRDUPmLTN2FnGvLZpHVNRN2MeRghKknSGDs",
+            "8sjV1AqBFvFuADBCQHhotaRq5DFFYSjjg1jMyVWMqXvZ",
+            "CNRQ2Q5YURFcQrATzYeKUWgKUoBDfqzkDrRWf21UXCVo",
+            "FGQoLafigpyVb7mLa6pvsDDpDaEE3JetrzQoAggTo3n7",
+        ] {
+            let filename = format!("tests/testdata/{}", pk);
+            let file: std::fs::File = std::fs::File::open(filename)
+                .unwrap_or_else(|_| panic!("{pk} should open read only"));
+            let json: serde_json::Value =
+                serde_json::from_reader(file).expect("file should be proper JSON");
+            program.add_account_with_base64_data(
+                Pubkey::from_str(pk).unwrap(),
+                u32::MAX as u64,
+                Pubkey::from_str(json["result"]["value"]["owner"].as_str().unwrap()).unwrap(),
+                json["result"]["value"]["data"].as_array().unwrap()[0]
+                    .as_str()
+                    .unwrap(),
+            );
+        }
+
+        // Inject mock Pyth oracle account
+        program.add_account(
+            pyth_key,
+            solana_sdk::account::Account {
+                lamports: u32::MAX as u64,
+                data: pyth_data,
+                owner: Pubkey::new_unique(), // Pyth owner doesn't matter for our tests
+                executable: false,
+                rent_epoch: 0,
+            },
+        );
+
+        let context: Rc<RefCell<ProgramTestContext>> =
+            Rc::new(RefCell::new(program.start_with_context().await));
+        solana_logger::setup_with_default(RUST_LOG_DEFAULT);
+
+        let usdc_mint_f: MintFixture = MintFixture::new(Rc::clone(&context), Some(6)).await;
+        let sol_mint_f: MintFixture = MintFixture::new(Rc::clone(&context), Some(9)).await;
+        let mut market_fixture: MarketFixture = MarketFixture::new_with_pyth(
+            Rc::clone(&context),
+            0,
+            9,
+            &usdc_mint_f.key,
+            initial_margin_bps,
+            maintenance_margin_bps,
+            pyth_key,
+            taker_fee_bps,
+            liquidation_buffer_bps,
+        )
+        .await;
+
+        let mut global_fixture: GlobalFixture =
+            GlobalFixture::new(Rc::clone(&context), &usdc_mint_f.key).await;
+        let mut sol_global_fixture: GlobalFixture =
+            GlobalFixture::new(Rc::clone(&context), &sol_mint_f.key).await;
+
+        let payer: Pubkey = context.borrow().payer.pubkey();
+        let payer_sol_fixture: TokenAccountFixture =
+            TokenAccountFixture::new(Rc::clone(&context), &sol_mint_f.key, &payer).await;
+        let payer_usdc_fixture =
+            TokenAccountFixture::new(Rc::clone(&context), &usdc_mint_f.key, &payer).await;
+        market_fixture.reload().await;
+        global_fixture.reload().await;
+        sol_global_fixture.reload().await;
+
+        TestFixture {
+            context: Rc::clone(&context),
+            usdc_mint_fixture: usdc_mint_f,
+            sol_mint_fixture: sol_mint_f,
+            market_fixture,
+            global_fixture,
+            sol_global_fixture,
+            payer_sol_fixture,
+            payer_usdc_fixture,
+            second_keypair,
+        }
+    }
+
+    /// Send a liquidate instruction.
+    pub async fn liquidate(
+        &mut self,
+        trader_to_liquidate: &Pubkey,
+    ) -> anyhow::Result<(), BanksClientError> {
+        self.liquidate_for_keypair(trader_to_liquidate, &self.payer_keypair())
+            .await
+    }
+
+    /// Send a liquidate instruction with a specific keypair as liquidator.
+    pub async fn liquidate_for_keypair(
+        &mut self,
+        trader_to_liquidate: &Pubkey,
+        keypair: &Keypair,
+    ) -> anyhow::Result<(), BanksClientError> {
+        use manifest::program::liquidate_instruction::liquidate_instruction;
+        let ix = liquidate_instruction(
+            &self.market_fixture.key,
+            &keypair.pubkey(),
+            trader_to_liquidate,
+        );
+        send_tx_with_retry(
+            Rc::clone(&self.context),
+            &[ix],
+            Some(&keypair.pubkey()),
+            &[keypair],
+        )
+        .await
+    }
+
+    /// Send a crank_funding instruction.
+    pub async fn crank_funding(
+        &mut self,
+        pyth_price_feed: &Pubkey,
+    ) -> anyhow::Result<(), BanksClientError> {
+        use manifest::program::crank_funding_instruction::crank_funding_instruction;
+        let payer = self.payer();
+        let payer_keypair = self.payer_keypair();
+        let ix = crank_funding_instruction(&self.market_fixture.key, &payer, pyth_price_feed);
+        send_tx_with_retry(
+            Rc::clone(&self.context),
+            &[ix],
+            Some(&payer),
+            &[&payer_keypair],
+        )
+        .await
+    }
+
     pub async fn try_load(
         &self,
         address: &Pubkey,
@@ -278,6 +464,8 @@ impl TestFixture {
                 1000,
                 500,
                 Pubkey::default(),
+                0,   // taker_fee_bps
+                200, // liquidation_buffer_bps
             );
 
         send_tx_with_retry(
@@ -688,6 +876,61 @@ impl TestFixture {
         .await
     }
 
+    /// Swap using a specific keypair as the trader.
+    /// For perps, only USDC token accounts are needed.
+    pub async fn swap_for_keypair(
+        &mut self,
+        in_atoms: u64,
+        out_atoms: u64,
+        is_base_in: bool,
+        is_exact_in: bool,
+        keypair: &Keypair,
+    ) -> anyhow::Result<(), BanksClientError> {
+        let trader_usdc: Pubkey = if keypair.pubkey() == self.payer() {
+            self.payer_usdc_fixture.key
+        } else {
+            // Create a new USDC token account for this keypair
+            let token_account_keypair: Keypair = Keypair::new();
+            let token_account_fixture: TokenAccountFixture =
+                TokenAccountFixture::new_with_keypair(
+                    Rc::clone(&self.context),
+                    &self.usdc_mint_fixture.key,
+                    &keypair.pubkey(),
+                    &token_account_keypair,
+                )
+                .await;
+            // For going long (is_base_in=false), need USDC in this account
+            if !is_base_in {
+                self.usdc_mint_fixture
+                    .mint_to(&token_account_fixture.key, in_atoms)
+                    .await;
+            }
+            token_account_fixture.key
+        };
+        let swap_ix: Instruction = swap_instruction(
+            &self.market_fixture.key,
+            &keypair.pubkey(),
+            &self.sol_mint_fixture.key,
+            &self.usdc_mint_fixture.key,
+            &self.payer_sol_fixture.key, // unused in perps
+            &trader_usdc,
+            in_atoms,
+            out_atoms,
+            is_base_in,
+            is_exact_in,
+            spl_token::id(),
+            spl_token::id(),
+            false,
+        );
+        send_tx_with_retry(
+            Rc::clone(&self.context),
+            &[swap_ix],
+            Some(&keypair.pubkey()),
+            &[keypair],
+        )
+        .await
+    }
+
     pub async fn swap_with_global(
         &mut self,
         in_atoms: u64,
@@ -830,6 +1073,8 @@ impl MarketFixture {
                 1000, // initial_margin_bps (10%)
                 500,  // maintenance_margin_bps (5%)
                 Pubkey::default(), // pyth_feed_account
+                0,    // taker_fee_bps
+                200,  // liquidation_buffer_bps
             );
 
         send_tx_with_retry(
@@ -901,6 +1146,87 @@ impl MarketFixture {
     pub async fn get_quote_volume(&mut self, trader: &Pubkey) -> u64 {
         self.reload().await;
         self.market.get_trader_voume(trader).as_u64()
+    }
+
+    /// Get the trader's perps position: (position_size, quote_cost_basis)
+    pub async fn get_trader_position(&mut self, trader: &Pubkey) -> (i64, u64) {
+        self.reload().await;
+        self.market.get_trader_position(trader)
+    }
+
+    /// Get the insurance fund balance from the market.
+    pub async fn get_insurance_fund_balance(&mut self) -> u64 {
+        self.reload().await;
+        self.market.fixed.get_insurance_fund_balance()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn new_with_pyth(
+        context: Rc<RefCell<ProgramTestContext>>,
+        base_mint_index: u8,
+        base_mint_decimals: u8,
+        quote_mint: &Pubkey,
+        initial_margin_bps: u64,
+        maintenance_margin_bps: u64,
+        pyth_feed: Pubkey,
+        taker_fee_bps: u64,
+        liquidation_buffer_bps: u64,
+    ) -> Self {
+        let (market_key, _) = get_market_address(base_mint_index, quote_mint);
+        let payer: Pubkey = context.borrow().payer.pubkey();
+        let payer_keypair: Keypair = context.borrow().payer.insecure_clone();
+        let create_market_ixs: Vec<Instruction> =
+            create_market_instructions(
+                base_mint_index,
+                base_mint_decimals,
+                quote_mint,
+                &payer,
+                initial_margin_bps,
+                maintenance_margin_bps,
+                pyth_feed,
+                taker_fee_bps,
+                liquidation_buffer_bps,
+            );
+
+        send_tx_with_retry(
+            Rc::clone(&context),
+            &create_market_ixs[..],
+            Some(&payer),
+            &[&payer_keypair],
+        )
+        .await
+        .unwrap();
+
+        let context_ref: Rc<RefCell<ProgramTestContext>> = Rc::clone(&context);
+
+        let mut lamports: u64 = 0;
+        let quote_mint_ai: MintAccountInfo = MintAccountInfo {
+            mint: Mint {
+                mint_authority: None.into(),
+                supply: 0,
+                decimals: 6,
+                is_initialized: true,
+                freeze_authority: None.into(),
+            },
+            info: &AccountInfo {
+                key: &Pubkey::new_unique(),
+                lamports: Rc::new(RefCell::new(&mut lamports)),
+                data: Rc::new(RefCell::new(&mut [])),
+                owner: &Pubkey::new_unique(),
+                rent_epoch: 0,
+                is_signer: false,
+                is_writable: false,
+                executable: false,
+            },
+        };
+        MarketFixture {
+            context: context_ref,
+            key: market_key,
+            market: MarketValue {
+                fixed: MarketFixed::new_empty(base_mint_index, base_mint_decimals, &quote_mint_ai),
+                dynamic: Vec::new(),
+            },
+        }
     }
 
     pub async fn get_resting_orders(&mut self) -> Vec<RestingOrder> {
@@ -1027,6 +1353,23 @@ impl MarketFixture {
             );
         }
     }
+}
+
+/// Build mock Pyth V2 price account data for testing.
+/// Returns a 240-byte buffer with the correct layout.
+pub fn build_mock_pyth_data(price: i64, expo: i32, confidence: u64) -> Vec<u8> {
+    let mut data = vec![0u8; 240];
+    // Magic number at offset 0
+    data[0..4].copy_from_slice(&0xa1b2c3d4u32.to_le_bytes());
+    // Exponent (i32) at offset 20
+    data[20..24].copy_from_slice(&expo.to_le_bytes());
+    // Aggregate price (i64) at offset 208
+    data[208..216].copy_from_slice(&price.to_le_bytes());
+    // Aggregate confidence (u64) at offset 216
+    data[216..224].copy_from_slice(&confidence.to_le_bytes());
+    // Aggregate status (u32 = 1 for Trading) at offset 224
+    data[224..228].copy_from_slice(&1u32.to_le_bytes());
+    data
 }
 
 #[derive(Clone)]
@@ -1769,6 +2112,8 @@ pub async fn create_market_with_mints(
             1000,
             500,
             Pubkey::default(),
+            0,   // taker_fee_bps
+            200, // liquidation_buffer_bps
         );
 
     send_tx_with_retry(
