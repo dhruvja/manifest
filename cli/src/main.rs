@@ -15,7 +15,7 @@ use manifest::{
         claim_seat_instruction::claim_seat_instruction,
         crank_funding_instruction, create_market_instructions,
         deposit_instruction, deposit_instruction_with_vault, expand_market_instruction, expand_market_n_instruction,
-        liquidate_instruction, release_seat_instruction, withdraw_instruction,
+        liquidate_instruction, release_seat_instruction, withdraw_instruction, withdraw_instruction_with_vault,
         ManifestInstruction,
     },
     state::OrderType,
@@ -414,6 +414,20 @@ enum Commands {
     /// Deposit into a Manifest market using ephemeral ATAs (run on ER).
     /// Transfers from the payer's ephemeral ATA to the market's vault ephemeral ATA.
     EphemeralManifestDeposit {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Quote mint address
+        #[arg(long)]
+        quote_mint: String,
+        /// Amount in quote atoms
+        #[arg(long)]
+        amount: u64,
+    },
+
+    /// Withdraw from a Manifest market using ephemeral ATAs (run on ER).
+    /// Transfers from the market's vault ephemeral ATA to the payer's ephemeral ATA.
+    EphemeralManifestWithdraw {
         /// Market PDA address
         #[arg(long)]
         market: String,
@@ -1201,6 +1215,34 @@ fn cmd_ephemeral_manifest_deposit(
     Ok(())
 }
 
+fn cmd_ephemeral_manifest_withdraw(
+    client: &RpcClient,
+    payer: &Keypair,
+    market: &Pubkey,
+    quote_mint: &Pubkey,
+    amount: u64,
+) -> Result<()> {
+    let (trader_ata, _) = get_ephemeral_ata(&payer.pubkey(), quote_mint);
+    let (vault_ata, _) = get_ephemeral_ata(market, quote_mint);
+    println!("Withdrawing {amount} atoms from Manifest market via ephemeral ATAs (ER)");
+    println!("  Market vault ATA     : {vault_ata}");
+    println!("  Trader ephemeral ATA : {trader_ata}");
+
+    let ix = withdraw_instruction_with_vault(
+        market,
+        &payer.pubkey(),
+        quote_mint,
+        amount,
+        &trader_ata,
+        &vault_ata,
+        ephemeral_spl_token_id(),
+        None,
+    );
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature: {sig}");
+    Ok(())
+}
+
 fn cmd_crank_funding(
     client: &RpcClient,
     payer: &Keypair,
@@ -1805,6 +1847,16 @@ fn main() -> Result<()> {
             let market = parse_pubkey(&market)?;
             let quote_mint = parse_pubkey(&quote_mint)?;
             cmd_ephemeral_manifest_deposit(&client, &payer, &market, &quote_mint, amount)?;
+        }
+
+        Commands::EphemeralManifestWithdraw {
+            market,
+            quote_mint,
+            amount,
+        } => {
+            let market = parse_pubkey(&market)?;
+            let quote_mint = parse_pubkey(&quote_mint)?;
+            cmd_ephemeral_manifest_withdraw(&client, &payer, &market, &quote_mint, amount)?;
         }
 
         // Handled above before the network/keypair setup; unreachable here.
