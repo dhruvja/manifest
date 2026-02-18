@@ -24,7 +24,8 @@ use program::{
     global_add_trader::process_global_add_trader, global_clean::process_global_clean,
     global_create::process_global_create, global_deposit::process_global_deposit,
     global_evict::process_global_evict, global_withdraw::process_global_withdraw,
-    liquidate::process_liquidate, process_swap, withdraw::process_withdraw, ManifestInstruction,
+    liquidate::process_liquidate, process_swap, release_seat::process_release_seat,
+    withdraw::process_withdraw, ManifestInstruction,
 };
 use solana_program::{
     account_info::AccountInfo, declare_id, entrypoint::ProgramResult, program_error::ProgramError,
@@ -93,7 +94,7 @@ security_txt! {
 // transaction limit before an attacker is able to clear a substantial number of
 // seats in one transaction.
 
-declare_id!("5QEqei6GyEu44vkh12gJNndqXmbmLy23VcTHWnRjQgG5");
+declare_id!("3TN9efyWfeG3s1ZDZdbYtLJwMdWRRtM2xPGsM2T9QrUa");
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);
@@ -166,6 +167,9 @@ pub fn process_instruction(
         }
         ManifestInstruction::CrankFunding => {
             process_crank_funding(program_id, accounts, data)?;
+        }
+        ManifestInstruction::ReleaseSeat => {
+            process_release_seat(program_id, accounts, data)?;
         }
     }
 

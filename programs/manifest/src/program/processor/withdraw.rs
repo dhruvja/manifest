@@ -15,7 +15,7 @@ use hypertree::DataIndex;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, pubkey::Pubkey};
 
 #[cfg(not(feature = "certora"))]
-use {crate::market_vault_seeds_with_bump, solana_program::program::invoke_signed};
+use {crate::validation::get_market_address, solana_program::program::invoke_signed};
 
 #[cfg(feature = "certora")]
 use {
@@ -75,18 +75,17 @@ pub(crate) fn process_withdraw_core(
     // The loader already validates that the trader_token is for the quote mint.
 
     let mint_key: &Pubkey = dynamic_account.get_quote_mint();
+    let base_mint_index: u8 = dynamic_account.fixed.get_base_mint_index();
 
-    // Derive vault bump on-the-fly for PDA signing
-    let (_, bump) = crate::validation::get_vault_address(market.key, mint_key);
-
-    // CPI to token program (ephemeral-spl-token on ER)
+    // CPI to token program — market PDA is the ATA owner, sign with market seeds
     spl_token_transfer_from_vault_to_trader(
         &token_program,
         &vault,
+        market.info,
         &trader_token,
         amount_atoms,
         market.key,
-        bump,
+        base_mint_index,
         mint_key,
     )?;
 
@@ -162,23 +161,25 @@ pub(crate) fn process_withdraw_core(
     Ok(())
 }
 
-/** Transfer from base (quote) vault to base (quote) trader using SPL Token **/
+/** Transfer from quote vault (ATA owned by market PDA) to trader using SPL Token **/
 #[cfg(not(feature = "certora"))]
 fn spl_token_transfer_from_vault_to_trader<'a, 'info>(
     token_program: &TokenProgram<'a, 'info>,
     vault: &TokenAccountInfo<'a, 'info>,
+    market_info: &'a solana_program::account_info::AccountInfo<'info>,
     trader_account: &TokenAccountInfo<'a, 'info>,
     amount: u64,
     market_key: &Pubkey,
-    vault_bump: u8,
-    mint_pubkey: &Pubkey,
+    base_mint_index: u8,
+    quote_mint: &Pubkey,
 ) -> ProgramResult {
+    let (_, market_bump) = get_market_address(base_mint_index, quote_mint);
     invoke_signed(
         &spl_token::instruction::transfer(
             token_program.key,
             vault.key,
             trader_account.key,
-            vault.key,
+            market_key, // authority = market PDA (owner of vault ATA)
             &[],
             amount,
         )?,
@@ -186,8 +187,14 @@ fn spl_token_transfer_from_vault_to_trader<'a, 'info>(
             token_program.as_ref().clone(),
             vault.as_ref().clone(),
             trader_account.as_ref().clone(),
+            market_info.clone(),
         ],
-        market_vault_seeds_with_bump!(market_key, mint_pubkey, vault_bump),
+        &[&[
+            b"market",
+            &[base_mint_index],
+            quote_mint.as_ref(),
+            &[market_bump],
+        ]],
     )
 }
 

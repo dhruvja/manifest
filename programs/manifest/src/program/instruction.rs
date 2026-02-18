@@ -192,6 +192,13 @@ pub enum ManifestInstruction {
     #[account(1, writable, name = "market", desc = "Perps market account")]
     #[account(2, name = "pyth_price_feed", desc = "Pyth price feed account")]
     CrankFunding = 17,
+
+    /// Release a claimed seat, freeing the block back to the free list.
+    /// Trader must have zero balances and no open position.
+    #[account(0, writable, signer, name = "payer", desc = "Payer / trader releasing seat")]
+    #[account(1, writable, name = "market", desc = "Account holding all market state")]
+    #[account(2, name = "system_program", desc = "System program")]
+    ReleaseSeat = 18,
 }
 
 impl ManifestInstruction {
@@ -202,7 +209,7 @@ impl ManifestInstruction {
 
 #[test]
 fn test_instruction_serialization() {
-    let num_instructions: u8 = 17;
+    let num_instructions: u8 = 18;
     for i in 0..=255 {
         let instruction: ManifestInstruction = match ManifestInstruction::try_from(i) {
             Ok(j) => {

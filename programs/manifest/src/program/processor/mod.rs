@@ -13,6 +13,7 @@ pub mod global_deposit;
 pub mod global_evict;
 pub mod global_withdraw;
 pub mod liquidate;
+pub mod release_seat;
 pub mod shared;
 pub mod swap;
 pub mod withdraw;

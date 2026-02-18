@@ -12,8 +12,8 @@ use crate::{
 };
 #[cfg(not(feature = "certora"))]
 use crate::{
-    market_vault_seeds_with_bump,
     program::{invoke, ManifestError},
+    validation::get_market_address,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use hypertree::{trace, DataIndex, NIL};
@@ -347,15 +347,17 @@ pub(crate) fn process_swap_core(
     if is_base_in {
         // Opening short: no base token transfer. Give quote profit back.
         if extra_quote_atoms.as_u64() > 0 {
-            let (_, quote_vault_bump) = crate::validation::get_vault_address(market.key, dynamic_account.fixed.get_quote_mint());
+            let base_mint_index: u8 = dynamic_account.fixed.get_base_mint_index();
+            let quote_mint: Pubkey = *dynamic_account.fixed.get_quote_mint();
             spl_token_transfer_from_vault_to_trader(
                 &token_program_quote,
                 &quote_vault,
+                market.info,
                 &trader_quote_account,
                 extra_quote_atoms.as_u64(),
                 market.key,
-                quote_vault_bump,
-                dynamic_account.fixed.get_quote_mint(),
+                base_mint_index,
+                &quote_mint,
             )?;
         }
     } else {
@@ -460,23 +462,25 @@ fn spl_token_transfer_from_trader_to_vault<'a, 'info>(
     spl_token_transfer(trader_account.info, vault.info, owner.info, amount)
 }
 
-/** Transfer from base (quote) vault to base (quote) trader using SPL Token **/
+/** Transfer from quote vault (ATA owned by market PDA) to trader using SPL Token **/
 #[cfg(not(feature = "certora"))]
 fn spl_token_transfer_from_vault_to_trader<'a, 'info>(
     token_program: &TokenProgram<'a, 'info>,
     vault: &TokenAccountInfo<'a, 'info>,
+    market_info: &'a solana_program::account_info::AccountInfo<'info>,
     trader_account: &TokenAccountInfo<'a, 'info>,
     amount: u64,
     market_key: &Pubkey,
-    vault_bump: u8,
-    mint_pubkey: &Pubkey,
+    base_mint_index: u8,
+    quote_mint: &Pubkey,
 ) -> ProgramResult {
+    let (_, market_bump) = get_market_address(base_mint_index, quote_mint);
     solana_program::program::invoke_signed(
         &spl_token::instruction::transfer(
             token_program.key,
             vault.key,
             trader_account.key,
-            vault.key,
+            market_key, // authority = market PDA (owner of vault ATA)
             &[],
             amount,
         )?,
@@ -484,8 +488,14 @@ fn spl_token_transfer_from_vault_to_trader<'a, 'info>(
             token_program.as_ref().clone(),
             vault.as_ref().clone(),
             trader_account.as_ref().clone(),
+            market_info.clone(),
         ],
-        market_vault_seeds_with_bump!(market_key, mint_pubkey, vault_bump),
+        &[&[
+            b"market",
+            &[base_mint_index],
+            quote_mint.as_ref(),
+            &[market_bump],
+        ]],
     )
 }
 

@@ -8,6 +8,10 @@ use solana_program::{
     pubkey::Pubkey,
     system_program,
 };
+use spl_associated_token_account::{self, get_associated_token_address};
+
+const EPHEMERAL_SPL_TOKEN_ID: Pubkey =
+    solana_program::pubkey!("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2");
 
 /// Creates a market at the PDA derived from base_mint_index and quote mint.
 /// The market account is created inside the program via invoke_signed.
@@ -22,6 +26,7 @@ pub fn create_market_instructions(
     pyth_feed_account: Pubkey,
     taker_fee_bps: u64,
     liquidation_buffer_bps: u64,
+    num_blocks: u32,
 ) -> Vec<Instruction> {
     let (market, _) = get_market_address(base_mint_index, quote_mint);
     vec![create_market_instruction(
@@ -35,6 +40,7 @@ pub fn create_market_instructions(
         pyth_feed_account,
         taker_fee_bps,
         liquidation_buffer_bps,
+        num_blocks,
     )]
 }
 
@@ -50,8 +56,13 @@ pub fn create_market_instruction(
     pyth_feed_account: Pubkey,
     taker_fee_bps: u64,
     liquidation_buffer_bps: u64,
+    num_blocks: u32,
 ) -> Instruction {
-    let (quote_vault, _) = get_vault_address(market, quote_mint);
+    let quote_vault = get_associated_token_address(market, quote_mint);
+    let (ephemeral_vault_ata, _) = Pubkey::find_program_address(
+        &[market.as_ref(), quote_mint.as_ref()],
+        &EPHEMERAL_SPL_TOKEN_ID,
+    );
     Instruction {
         program_id: crate::id(),
         accounts: vec![
@@ -62,6 +73,9 @@ pub fn create_market_instruction(
             AccountMeta::new(quote_vault, false),
             AccountMeta::new_readonly(spl_token::id(), false),
             AccountMeta::new_readonly(spl_token_2022::id(), false),
+            AccountMeta::new_readonly(spl_associated_token_account::id(), false),
+            AccountMeta::new(ephemeral_vault_ata, false),
+            AccountMeta::new_readonly(EPHEMERAL_SPL_TOKEN_ID, false),
         ],
         data: [
             ManifestInstruction::CreateMarket.to_vec(),
@@ -73,6 +87,7 @@ pub fn create_market_instruction(
                 pyth_feed_account,
                 taker_fee_bps,
                 liquidation_buffer_bps,
+                num_blocks,
             )
             .try_to_vec()
             .unwrap(),

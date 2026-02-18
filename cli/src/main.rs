@@ -13,18 +13,15 @@ use manifest::{
         batch_update::{CancelOrderParams, PlaceOrderParams},
         batch_update_instruction,
         claim_seat_instruction::claim_seat_instruction,
-        crank_funding_instruction,
-        create_market_instructions,
-        deposit_instruction,
-        expand_market_instruction,
-        liquidate_instruction,
-        withdraw_instruction,
+        crank_funding_instruction, create_market_instructions,
+        deposit_instruction, deposit_instruction_with_vault, expand_market_instruction, expand_market_n_instruction,
+        liquidate_instruction, release_seat_instruction, withdraw_instruction,
         ManifestInstruction,
     },
     state::OrderType,
     validation::{get_market_address, get_vault_address},
 };
-use solana_client::rpc_client::RpcClient;
+use solana_client::{rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig};
 use solana_program::{pubkey::Pubkey, system_program};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
@@ -44,6 +41,8 @@ use std::str::FromStr;
 const DEFAULT_URL: &str = "https://api.devnet.solana.com";
 const ER_URL: &str = "https://devnet.magicblock.app";
 const DELEGATION_PROGRAM_ID: &str = "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh";
+/// magicblock-labs ephemeral-spl-token program
+const EPHEMERAL_SPL_TOKEN: &str = "SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2";
 /// Pyth V2 SOL/USD devnet price account
 const PYTH_SOL_USD_DEVNET: &str = "J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix";
 /// Pyth PriceUpdateV3 SOL/USD on MagicBlock ER
@@ -80,7 +79,7 @@ impl CliConfig {
             }
             if let Some((k, v)) = line.split_once('=') {
                 match k.trim() {
-                    "url"     => cfg.url     = Some(v.trim().to_string()),
+                    "url" => cfg.url = Some(v.trim().to_string()),
                     "keypair" => cfg.keypair = Some(v.trim().to_string()),
                     _ => {}
                 }
@@ -95,17 +94,19 @@ impl CliConfig {
             std::fs::create_dir_all(parent)?;
         }
         let mut out = String::new();
-        if let Some(u) = &self.url     { out.push_str(&format!("url={u}\n")); }
-        if let Some(k) = &self.keypair { out.push_str(&format!("keypair={k}\n")); }
+        if let Some(u) = &self.url {
+            out.push_str(&format!("url={u}\n"));
+        }
+        if let Some(k) = &self.keypair {
+            out.push_str(&format!("keypair={k}\n"));
+        }
         std::fs::write(&path, out)?;
         Ok(())
     }
 
     /// Effective URL: CLI flag > config file > hardcoded default.
     fn resolve_url<'a>(&'a self, flag: Option<&'a str>) -> &'a str {
-        flag
-            .or(self.url.as_deref())
-            .unwrap_or(DEFAULT_URL)
+        flag.or(self.url.as_deref()).unwrap_or(DEFAULT_URL)
     }
 
     /// Effective keypair path: CLI flag > config file > default.
@@ -144,7 +145,7 @@ enum Commands {
         decimals: u8,
     },
 
-    /// Create an ATA for <owner> and mint <amount> tokens into it
+    /// Create an ATA for <recipient> and mint <amount> tokens into it
     MintTo {
         /// Mint address
         #[arg(long)]
@@ -152,9 +153,9 @@ enum Commands {
         /// Token amount in base units (atoms)
         #[arg(long)]
         amount: u64,
-        /// Token account owner (defaults to payer)
+        /// Recipient address — ATA owner who receives the tokens (defaults to payer)
         #[arg(long)]
-        owner: Option<String>,
+        recipient: Option<String>,
     },
 
     /// Create a new perps market
@@ -183,6 +184,9 @@ enum Commands {
         /// Liquidation buffer above maintenance margin in bps
         #[arg(long, default_value = "200")]
         liquidation_buffer_bps: u64,
+        /// Number of blocks to pre-allocate (each block = 80 bytes for a seat or order)
+        #[arg(long, default_value = "0")]
+        num_blocks: u32,
     },
 
     /// Expand a market's free block capacity
@@ -203,6 +207,13 @@ enum Commands {
         /// Trader to claim seat for (defaults to payer)
         #[arg(long)]
         trader: Option<String>,
+    },
+
+    /// Release a trading seat (must have zero balances and no position)
+    ReleaseSeat {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
     },
 
     /// Deposit USDC margin into a market seat
@@ -271,6 +282,9 @@ enum Commands {
         /// Market PDA address
         #[arg(long)]
         market: String,
+        /// Quote mint address (needed to derive the ephemeral vault ATA)
+        #[arg(long)]
+        quote_mint: String,
     },
 
     /// Crank the funding rate (updates oracle cache + global cumulative funding)
@@ -354,6 +368,62 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
+    // ── Ephemeral SPL Token commands ────────────────────────────────────────
+    /// Initialize the ephemeral-spl-token global vault for a mint.
+    /// Must be called once per mint before any ephemeral deposits.
+    EphemeralInitGlobalVault {
+        /// Quote mint address
+        #[arg(long)]
+        mint: String,
+    },
+
+    /// Initialize an ephemeral ATA for an owner.
+    /// For the user's ATA use `--owner <user>` (defaults to payer).
+    /// For the market vault ATA use `--owner <market>`.
+    EphemeralInitAta {
+        /// Quote mint address
+        #[arg(long)]
+        mint: String,
+        /// Owner of the ephemeral ATA (defaults to payer)
+        #[arg(long)]
+        owner: Option<String>,
+    },
+
+    /// Deposit SPL tokens from the payer's regular ATA into their ephemeral ATA.
+    /// Locks real USDC in the global vault and credits the ephemeral balance.
+    EphemeralDepositSpl {
+        /// Quote mint address
+        #[arg(long)]
+        mint: String,
+        /// Amount in token atoms
+        #[arg(long)]
+        amount: u64,
+        /// Recipient address — ATA owner who receives the tokens (defaults to payer)
+        #[arg(long)]
+        recipient: Option<String>,
+    },
+
+    /// Delegate the payer's ephemeral ATA to the MagicBlock ER.
+    EphemeralDelegateAta {
+        /// Quote mint address
+        #[arg(long)]
+        mint: String,
+    },
+
+    /// Deposit into a Manifest market using ephemeral ATAs (run on ER).
+    /// Transfers from the payer's ephemeral ATA to the market's vault ephemeral ATA.
+    EphemeralManifestDeposit {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Quote mint address
+        #[arg(long)]
+        quote_mint: String,
+        /// Amount in quote atoms
+        #[arg(long)]
+        amount: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -398,13 +468,16 @@ fn rpc(url: &str) -> RpcClient {
 
 fn send(client: &RpcClient, ixs: &[Instruction], signers: &[&Keypair]) -> Result<String> {
     let blockhash = client.get_latest_blockhash()?;
-    let tx = Transaction::new_signed_with_payer(
-        ixs,
-        Some(&signers[0].pubkey()),
-        signers,
-        blockhash,
-    );
-    let sig = client.send_and_confirm_transaction_with_spinner(&tx)?;
+    let tx =
+        Transaction::new_signed_with_payer(ixs, Some(&signers[0].pubkey()), signers, blockhash);
+    let sig = client.send_and_confirm_transaction_with_spinner_and_config(
+        &tx,
+        CommitmentConfig::processed(),
+        RpcSendTransactionConfig {
+            skip_preflight: true,
+            ..Default::default()
+        },
+    )?;
     Ok(sig.to_string())
 }
 
@@ -417,7 +490,9 @@ fn parse_order_type(s: &str) -> Result<OrderType> {
         "limit" => Ok(OrderType::Limit),
         "ioc" | "immediate-or-cancel" | "immediateorcancel" => Ok(OrderType::ImmediateOrCancel),
         "post-only" | "postonly" => Ok(OrderType::PostOnly),
-        other => Err(anyhow!("Unknown order type '{other}'. Use: limit | ioc | post-only")),
+        other => Err(anyhow!(
+            "Unknown order type '{other}'. Use: limit | ioc | post-only"
+        )),
     }
 }
 
@@ -437,13 +512,17 @@ fn fetch_pyth_price(
 
     let data = client.get_account_data(feed)?;
     if data.len() < 240 {
-        return Err(anyhow!("Pyth account too small ({} bytes). Is this really a Pyth V2 price account?", data.len()));
+        return Err(anyhow!(
+            "Pyth account too small ({} bytes). Is this really a Pyth V2 price account?",
+            data.len()
+        ));
     }
     let magic = u32::from_le_bytes(data[0..4].try_into().unwrap());
     if magic != PYTH_MAGIC {
         return Err(anyhow!(
             "Pyth magic mismatch: got {:#010x}, expected {:#010x}",
-            magic, PYTH_MAGIC
+            magic,
+            PYTH_MAGIC
         ));
     }
     let expo = i32::from_le_bytes(data[EXPO_OFF..EXPO_OFF + 4].try_into().unwrap());
@@ -489,18 +568,21 @@ fn fetch_pyth_price(
 ///   human_price = price / 10^expo
 fn parse_price_v3(data: &[u8]) -> Result<f64> {
     if data.len() < 93 {
-        return Err(anyhow!("PriceUpdateV3 account too small ({} bytes)", data.len()));
+        return Err(anyhow!(
+            "PriceUpdateV3 account too small ({} bytes)",
+            data.len()
+        ));
     }
     let msg_start: usize = match data[40] {
         0x01 => 41,
         0x00 => 42,
-        b    => return Err(anyhow!("Unknown VerificationLevel byte: {:#04x}", b)),
+        b => return Err(anyhow!("Unknown VerificationLevel byte: {:#04x}", b)),
     };
     if data.len() < msg_start + 52 {
         return Err(anyhow!("PriceUpdateV3 truncated at message payload"));
     }
     let price = i64::from_le_bytes(data[msg_start + 32..msg_start + 40].try_into().unwrap());
-    let expo  = i32::from_le_bytes(data[msg_start + 48..msg_start + 52].try_into().unwrap());
+    let expo = i32::from_le_bytes(data[msg_start + 48..msg_start + 52].try_into().unwrap());
     if price <= 0 {
         return Err(anyhow!("PriceUpdateV3 price non-positive: {price}"));
     }
@@ -536,14 +618,29 @@ fn usd_to_order_price(price_usd: f64, quote_decimals: u8, base_decimals: u8) -> 
     (m.round() as u32, e as i8)
 }
 
-fn delegate_market_ix(payer: &Pubkey, market: &Pubkey) -> Instruction {
+fn delegate_market_ix(payer: &Pubkey, market: &Pubkey, quote_mint: &Pubkey) -> Instruction {
     let dlp = Pubkey::from_str(DELEGATION_PROGRAM_ID).unwrap();
+    let e_spl = Pubkey::from_str(EPHEMERAL_SPL_TOKEN).unwrap();
     let owner = manifest::id();
+
+    // Market delegation PDAs
     let (delegation_record, _) =
         Pubkey::find_program_address(&[b"delegation", market.as_ref()], &dlp);
     let (delegation_metadata, _) =
         Pubkey::find_program_address(&[b"delegation-metadata", market.as_ref()], &dlp);
     let (buffer, _) = Pubkey::find_program_address(&[b"buffer", market.as_ref()], &owner);
+
+    // Ephemeral vault ATA and its delegation PDAs
+    let (ephemeral_vault_ata, _) =
+        Pubkey::find_program_address(&[market.as_ref(), quote_mint.as_ref()], &e_spl);
+    let (vault_ata_buffer, _) =
+        Pubkey::find_program_address(&[b"buffer", ephemeral_vault_ata.as_ref()], &e_spl);
+    let (vault_ata_delegation_record, _) =
+        Pubkey::find_program_address(&[b"delegation", ephemeral_vault_ata.as_ref()], &dlp);
+    let (vault_ata_delegation_metadata, _) = Pubkey::find_program_address(
+        &[b"delegation-metadata", ephemeral_vault_ata.as_ref()],
+        &dlp,
+    );
 
     Instruction {
         program_id: manifest::id(),
@@ -556,6 +653,11 @@ fn delegate_market_ix(payer: &Pubkey, market: &Pubkey) -> Instruction {
             AccountMeta::new(delegation_metadata, false),
             AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new(buffer, false),
+            AccountMeta::new(ephemeral_vault_ata, false),
+            AccountMeta::new_readonly(e_spl, false),
+            AccountMeta::new(vault_ata_buffer, false),
+            AccountMeta::new(vault_ata_delegation_record, false),
+            AccountMeta::new(vault_ata_delegation_metadata, false),
         ],
         data: ManifestInstruction::DelegateMarket.to_vec(),
     }
@@ -617,6 +719,128 @@ fn create_ata_and_mint(
     Ok(ata)
 }
 
+// ─── ephemeral-spl-token helpers ─────────────────────────────────────────────
+
+fn ephemeral_spl_token_id() -> Pubkey {
+    Pubkey::from_str(EPHEMERAL_SPL_TOKEN).unwrap()
+}
+
+/// Global vault data account: PDA([mint], ephemeral_spl_token)
+fn get_global_vault(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[mint.as_ref()], &ephemeral_spl_token_id())
+}
+
+/// User's (or any owner's) ephemeral ATA: PDA([owner, mint], ephemeral_spl_token)
+fn get_ephemeral_ata(owner: &Pubkey, mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[owner.as_ref(), mint.as_ref()], &ephemeral_spl_token_id())
+}
+
+/// The SPL token account (ATA) that the global vault PDA owns — holds real USDC.
+fn get_vault_token_account(mint: &Pubkey) -> Pubkey {
+    let (global_vault, _) = get_global_vault(mint);
+    get_associated_token_address(&global_vault, mint)
+}
+
+/// InitializeGlobalVault (disc=1): create the per-mint global vault data account.
+/// Accounts: [vault(PDA,writable), payer(signer), mint, system_program]
+/// Data: [1u8, bump]
+fn ix_init_global_vault(payer: &Pubkey, mint: &Pubkey) -> Instruction {
+    let e_spl = ephemeral_spl_token_id();
+    let (vault, bump) = get_global_vault(mint);
+    Instruction {
+        program_id: e_spl,
+        accounts: vec![
+            AccountMeta::new(vault, false),
+            AccountMeta::new(*payer, true),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ],
+        data: vec![1u8, bump],
+    }
+}
+
+/// InitializeEphemeralAta (disc=0): create an ephemeral ATA for `owner`.
+/// Accounts: [ephemeral_ata(PDA,writable), payer(signer), owner, mint, system_program]
+/// Data: [0u8, bump]
+fn ix_init_ephemeral_ata(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey) -> Instruction {
+    let e_spl = ephemeral_spl_token_id();
+    let (ata, bump) = get_ephemeral_ata(owner, mint);
+    Instruction {
+        program_id: e_spl,
+        accounts: vec![
+            AccountMeta::new(ata, false),
+            AccountMeta::new(*payer, true),
+            AccountMeta::new_readonly(*owner, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ],
+        data: vec![0u8, bump],
+    }
+}
+
+/// DepositSplTokens (disc=2): move real SPL tokens from payer's ATA into ephemeral ATA.
+/// Locks USDC in the global vault and credits the user's ephemeral balance.
+/// Accounts: [ephemeral_ata(writable), global_vault, mint, source_token(writable),
+///            vault_token(writable), authority(signer), token_program]
+/// Data: [2u8, amount_le_8_bytes]
+fn ix_deposit_spl_tokens(
+    authority: &Pubkey,
+    recipient: &Pubkey,
+    mint: &Pubkey,
+    source_token: &Pubkey,
+    amount: u64,
+) -> Instruction {
+    let e_spl = ephemeral_spl_token_id();
+    let (ata, _) = get_ephemeral_ata(recipient, mint);
+    let (global_vault, _) = get_global_vault(mint);
+    let vault_token = get_vault_token_account(mint);
+
+    let mut data = vec![2u8];
+    data.extend_from_slice(&amount.to_le_bytes());
+
+    Instruction {
+        program_id: e_spl,
+        accounts: vec![
+            AccountMeta::new(ata, false),
+            AccountMeta::new_readonly(global_vault, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new(*source_token, false),
+            AccountMeta::new(vault_token, false),
+            AccountMeta::new(*authority, true),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ],
+        data,
+    }
+}
+
+/// DelegateEphemeralAta (disc=4): delegate the payer's own ephemeral ATA to the ER.
+/// payer MUST equal the owner of the ATA (seeds=[payer, mint]).
+/// Data: [4u8, bump]
+fn ix_delegate_ephemeral_ata(payer: &Pubkey, mint: &Pubkey) -> Instruction {
+    let e_spl = ephemeral_spl_token_id();
+    let dlp = Pubkey::from_str(DELEGATION_PROGRAM_ID).unwrap();
+    let (ata, bump) = get_ephemeral_ata(payer, mint);
+    let (buffer, _) = Pubkey::find_program_address(&[b"buffer", ata.as_ref()], &e_spl);
+    let (delegation_record, _) = Pubkey::find_program_address(&[b"delegation", ata.as_ref()], &dlp);
+    let (delegation_metadata, _) =
+        Pubkey::find_program_address(&[b"delegation-metadata", ata.as_ref()], &dlp);
+
+    Instruction {
+        program_id: e_spl,
+        accounts: vec![
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(ata, false),
+            AccountMeta::new_readonly(e_spl, false), // owner_program
+            AccountMeta::new(buffer, false),
+            AccountMeta::new(delegation_record, false),
+            AccountMeta::new(delegation_metadata, false),
+            AccountMeta::new_readonly(dlp, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ],
+        data: vec![4u8, bump],
+    }
+}
+
 // ─── command handlers ────────────────────────────────────────────────────────
 
 fn cmd_create_mint(client: &RpcClient, payer: &Keypair, decimals: u8) -> Result<()> {
@@ -650,11 +874,15 @@ fn cmd_create_market(
     pyth_feed: Pubkey,
     taker_fee_bps: u64,
     liquidation_buffer_bps: u64,
+    num_blocks: u32,
 ) -> Result<()> {
     let (market, _) = get_market_address(base_mint_index, quote_mint);
     let (vault, _) = get_vault_address(&market, quote_mint);
     println!("Market PDA  : {market}");
     println!("Quote vault : {vault}");
+    if num_blocks > 0 {
+        println!("Pre-expand  : {num_blocks} blocks");
+    }
 
     let ixs = create_market_instructions(
         base_mint_index,
@@ -666,20 +894,39 @@ fn cmd_create_market(
         pyth_feed,
         taker_fee_bps,
         liquidation_buffer_bps,
+        num_blocks,
     );
     let sig = send(client, &ixs, &[payer])?;
     println!("Signature   : {sig}");
     Ok(())
 }
 
+fn cmd_release_seat(client: &RpcClient, payer: &Keypair, market: &Pubkey) -> Result<()> {
+    println!("Releasing seat for {} on market {market}…", payer.pubkey());
+    let ix = release_seat_instruction(market, &payer.pubkey());
+    let sig = send(client, &[ix], &[payer])?;
+    println!("Signature: {sig}");
+    Ok(())
+}
+
 fn cmd_expand(client: &RpcClient, payer: &Keypair, market: &Pubkey, blocks: u32) -> Result<()> {
     println!("Expanding market {market} by {blocks} block(s)…");
-    // The instruction expands by one block each call; batch them into one tx.
-    let ixs: Vec<Instruction> = (0..blocks)
-        .map(|_| expand_market_instruction(market, &payer.pubkey()))
-        .collect();
-    let sig = send(client, &ixs, &[payer])?;
-    println!("Signature: {sig}");
+    // Solana realloc limit is 10 KB per instruction → max ~125 blocks (80 bytes each).
+    // Use chunks of 100 blocks per tx to stay safe.
+    const CHUNK: u32 = 100;
+    let mut remaining = blocks;
+    let mut allocated = 0u32;
+    let mut batch = 1u32;
+    while remaining > 0 {
+        let n = remaining.min(CHUNK);
+        // Request enough free blocks so the program allocates exactly `n` more
+        allocated += n;
+        let ix = expand_market_n_instruction(market, &payer.pubkey(), allocated);
+        let sig = send(client, &[ix], &[payer])?;
+        println!("  batch {batch}: +{n} blocks (total {allocated})  sig={sig}");
+        remaining -= n;
+        batch += 1;
+    }
     Ok(())
 }
 
@@ -755,9 +1002,7 @@ fn cmd_place_order(
 ) -> Result<()> {
     let side = if is_bid { "BID" } else { "ASK" };
     let price = price_mantissa as f64 * 10f64.powi(price_exponent as i32);
-    println!(
-        "Placing {side} {base_atoms} base atoms @ price={price:.8} ({order_type:?})…"
-    );
+    println!("Placing {side} {base_atoms} base atoms @ price={price:.8} ({order_type:?})…");
     let ix = batch_update_instruction(
         market,
         &payer.pubkey(),
@@ -823,7 +1068,10 @@ fn cmd_open_long(
             OrderType::ImmediateOrCancel,
             0,
         )],
-        None, None, None, None,
+        None,
+        None,
+        None,
+        None,
     );
     let sig = send(client, &[ix], &[payer])?;
     println!("Signature: {sig}");
@@ -853,12 +1101,103 @@ fn cmd_cancel_order(
     Ok(())
 }
 
-fn cmd_delegate(client: &RpcClient, payer: &Keypair, market: &Pubkey) -> Result<()> {
+fn cmd_delegate(client: &RpcClient, payer: &Keypair, market: &Pubkey, quote_mint: &Pubkey) -> Result<()> {
     println!("Delegating market {market} to MagicBlock ER…");
-    let ix = delegate_market_ix(&payer.pubkey(), market);
+    let ix = delegate_market_ix(&payer.pubkey(), market, quote_mint);
     let sig = send(client, &[ix], &[payer])?;
     println!("Signature: {sig}");
     println!("Market is now delegated. Post-delegation operations (deposit/withdraw) must run on base chain before this step, or order-only ops on ER.");
+    Ok(())
+}
+
+fn cmd_ephemeral_init_global_vault(
+    client: &RpcClient,
+    payer: &Keypair,
+    mint: &Pubkey,
+) -> Result<()> {
+    let (vault, _) = get_global_vault(mint);
+    println!("Initializing ephemeral global vault for mint {mint}");
+    println!("  Global vault PDA : {vault}");
+    // ix1: init the global vault data account
+    // ix2: create the SPL ATA that will hold real tokens (vault_token account)
+    let ix1 = ix_init_global_vault(&payer.pubkey(), mint);
+    let ix2 =
+        create_associated_token_account_idempotent(&payer.pubkey(), &vault, mint, &spl_token::id());
+    let vault_token = get_vault_token_account(mint);
+    println!("  Vault token ATA  : {vault_token}");
+    let sig = send(client, &[ix1, ix2], &[payer])?;
+    println!("  Signature: {sig}");
+    Ok(())
+}
+
+fn cmd_ephemeral_init_ata(
+    client: &RpcClient,
+    payer: &Keypair,
+    owner: &Pubkey,
+    mint: &Pubkey,
+) -> Result<()> {
+    let (ata, _) = get_ephemeral_ata(owner, mint);
+    println!("Initializing ephemeral ATA for owner {owner}, mint {mint}");
+    println!("  Ephemeral ATA : {ata}");
+    let ix = ix_init_ephemeral_ata(&payer.pubkey(), owner, mint);
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature: {sig}");
+    Ok(())
+}
+
+fn cmd_ephemeral_deposit_spl(
+    client: &RpcClient,
+    payer: &Keypair,
+    mint: &Pubkey,
+    recipient: &Pubkey,
+    amount: u64,
+) -> Result<()> {
+    println!("Payer is {}", payer.pubkey());
+    let source_token = get_associated_token_address(recipient, mint);
+    let (ata, _) = get_ephemeral_ata(recipient, mint);
+    println!("Depositing {amount} atoms from regular ATA into ephemeral ATA");
+    println!("  Source (SPL ATA)  : {source_token}");
+    println!("  Dest (ephemeral)  : {ata}");
+    let ix = ix_deposit_spl_tokens(&payer.pubkey(), recipient, mint, &source_token, amount);
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature: {sig}");
+    Ok(())
+}
+
+fn cmd_ephemeral_delegate_ata(client: &RpcClient, payer: &Keypair, mint: &Pubkey) -> Result<()> {
+    let (ata, _) = get_ephemeral_ata(&payer.pubkey(), mint);
+    println!("Delegating ephemeral ATA {ata} to ER…");
+    let ix = ix_delegate_ephemeral_ata(&payer.pubkey(), mint);
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature: {sig}");
+    Ok(())
+}
+
+fn cmd_ephemeral_manifest_deposit(
+    client: &RpcClient,
+    payer: &Keypair,
+    market: &Pubkey,
+    quote_mint: &Pubkey,
+    amount: u64,
+) -> Result<()> {
+    let (trader_ata, _) = get_ephemeral_ata(&payer.pubkey(), quote_mint);
+    let (vault_ata, _) = get_ephemeral_ata(market, quote_mint);
+    println!("Depositing {amount} atoms into Manifest market via ephemeral ATAs (ER)");
+    println!("  Trader ephemeral ATA : {trader_ata}");
+    println!("  Market vault ATA     : {vault_ata}");
+
+    let ix = deposit_instruction_with_vault(
+        market,
+        &payer.pubkey(),
+        quote_mint,
+        amount,
+        &trader_ata,
+        &vault_ata,
+        ephemeral_spl_token_id(),
+        None,
+    );
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature: {sig}");
     Ok(())
 }
 
@@ -953,57 +1292,82 @@ fn cmd_setup(
     println!("  Market PDA : {market_key}");
     println!("  Quote vault: {quote_vault}");
     let create_ixs = create_market_instructions(
-        base_mint_index, BASE_MINT_DECIMALS, &usdc_mint, &payer.pubkey(),
-        initial_margin_bps, maintenance_margin_bps,
-        pyth_feed, taker_fee_bps, LIQUIDATION_BUFFER_BPS,
+        base_mint_index,
+        BASE_MINT_DECIMALS,
+        &usdc_mint,
+        &payer.pubkey(),
+        initial_margin_bps,
+        maintenance_margin_bps,
+        pyth_feed,
+        taker_fee_bps,
+        LIQUIDATION_BUFFER_BPS,
+        20, // pre-expand 20 blocks during creation
     );
     let sig = send(devnet, &create_ixs, &[payer])?;
-    println!("  Created: {sig}");
-
-    // ── Step 4: Expand ────────────────────────────────────────────────────
-    println!("\n── Step 4: Expanding market (20 free blocks)…");
-    let expand_ixs: Vec<Instruction> = (0..20)
-        .map(|_| expand_market_instruction(&market_key, &payer.pubkey()))
-        .collect();
-    let sig = send(devnet, &expand_ixs, &[payer])?;
-    println!("  Expanded: {sig}");
+    println!("  Created with 20 pre-expanded blocks: {sig}");
 
     // ── Step 5: Claim seats ───────────────────────────────────────────────
     println!("\n── Step 5: Claiming seats…");
-    let sig = send(devnet, &[claim_seat_instruction(&market_key, &maker.pubkey())], &[&maker])?;
+    let sig = send(
+        devnet,
+        &[claim_seat_instruction(&market_key, &maker.pubkey())],
+        &[&maker],
+    )?;
     println!("  Maker: {sig}");
-    let sig = send(devnet, &[claim_seat_instruction(&market_key, &payer.pubkey())], &[payer])?;
+    let sig = send(
+        devnet,
+        &[claim_seat_instruction(&market_key, &payer.pubkey())],
+        &[payer],
+    )?;
     println!("  Payer: {sig}");
 
     // ── Step 6: Fund ATAs + deposit ───────────────────────────────────────
     println!("\n── Step 6: Funding ATAs and depositing margins…");
     let maker_ata = create_ata_and_mint(
-        devnet, payer, &usdc_mint, &maker.pubkey(),
+        devnet,
+        payer,
+        &usdc_mint,
+        &maker.pubkey(),
         5_000 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
     )?;
     let dep = deposit_instruction(
-        &market_key, &maker.pubkey(), &usdc_mint,
+        &market_key,
+        &maker.pubkey(),
+        &usdc_mint,
         5_000 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-        &maker_ata, spl_token::id(), None,
+        &maker_ata,
+        spl_token::id(),
+        None,
     );
     let sig = send(devnet, &[dep], &[&maker])?;
     println!("  Maker deposited 5 000 USDC: {sig}");
 
     let payer_ata = create_ata_and_mint(
-        devnet, payer, &usdc_mint, &payer.pubkey(),
+        devnet,
+        payer,
+        &usdc_mint,
+        &payer.pubkey(),
         201 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
     )?;
     let dep = deposit_instruction(
-        &market_key, &payer.pubkey(), &usdc_mint,
+        &market_key,
+        &payer.pubkey(),
+        &usdc_mint,
         200 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-        &payer_ata, spl_token::id(), None,
+        &payer_ata,
+        spl_token::id(),
+        None,
     );
     let sig = send(devnet, &[dep], &[payer])?;
     println!("  Payer deposited 200 USDC: {sig}");
 
     // ── Step 7: Delegate ──────────────────────────────────────────────────
     println!("\n── Step 7: Delegating market to MagicBlock…");
-    let sig = send(devnet, &[delegate_market_ix(&payer.pubkey(), &market_key)], &[payer])?;
+    let sig = send(
+        devnet,
+        &[delegate_market_ix(&payer.pubkey(), &market_key, &usdc_mint)],
+        &[payer],
+    )?;
     println!("  Delegated: {sig}");
 
     // ── Fetch oracle price ────────────────────────────────────────────────
@@ -1022,48 +1386,88 @@ fn cmd_setup(
 
     println!("\n── Step 8: Maker places resting ASK 1 000 SOL @ ${entry_price_usd:.2} (ER)…");
     let ask_ix = batch_update_instruction(
-        &market_key, &maker.pubkey(), None, vec![],
+        &market_key,
+        &maker.pubkey(),
+        None,
+        vec![],
         vec![PlaceOrderParams::new(
             1_000 * 10u64.pow(BASE_MINT_DECIMALS as u32),
-            entry_mantissa, entry_expo, false, OrderType::Limit, 0,
+            entry_mantissa,
+            entry_expo,
+            false,
+            OrderType::Limit,
+            0,
         )],
-        None, None, None, None,
+        None,
+        None,
+        None,
+        None,
     );
     let sig = send(er, &[ask_ix], &[&maker])?;
     println!("  Ask placed: {sig}");
 
     println!("\n── Step 9: Payer places IOC BID → opens LONG 0.001 SOL (ER)…");
     let bid_ix = batch_update_instruction(
-        &market_key, &payer.pubkey(), None, vec![],
+        &market_key,
+        &payer.pubkey(),
+        None,
+        vec![],
         vec![PlaceOrderParams::new(
             position_base_atoms,
-            entry_mantissa, entry_expo, true,
-            OrderType::ImmediateOrCancel, 0,
+            entry_mantissa,
+            entry_expo,
+            true,
+            OrderType::ImmediateOrCancel,
+            0,
         )],
-        None, None, None, None,
+        None,
+        None,
+        None,
+        None,
     );
     let sig = send(er, &[bid_ix], &[payer])?;
     println!("  Long opened: {sig}");
 
     println!("\n── Step 10: Payer places ASK to close LONG @ ${exit_price_usd:.4} (ER)…");
     let close_ask_ix = batch_update_instruction(
-        &market_key, &payer.pubkey(), None, vec![],
+        &market_key,
+        &payer.pubkey(),
+        None,
+        vec![],
         vec![PlaceOrderParams::new(
-            position_base_atoms, exit_mantissa, exit_expo, false, OrderType::Limit, 0,
+            position_base_atoms,
+            exit_mantissa,
+            exit_expo,
+            false,
+            OrderType::Limit,
+            0,
         )],
-        None, None, None, None,
+        None,
+        None,
+        None,
+        None,
     );
     let sig = send(er, &[close_ask_ix], &[payer])?;
     println!("  Close ASK placed: {sig}");
 
     println!("\n── Step 11: Maker places IOC BID → closes payer's LONG (ER)…");
     let close_bid_ix = batch_update_instruction(
-        &market_key, &maker.pubkey(), None, vec![],
+        &market_key,
+        &maker.pubkey(),
+        None,
+        vec![],
         vec![PlaceOrderParams::new(
-            position_base_atoms, exit_mantissa, exit_expo, true,
-            OrderType::ImmediateOrCancel, 0,
+            position_base_atoms,
+            exit_mantissa,
+            exit_expo,
+            true,
+            OrderType::ImmediateOrCancel,
+            0,
         )],
-        None, None, None, None,
+        None,
+        None,
+        None,
+        None,
     );
     let sig = send(er, &[close_bid_ix], &[&maker])?;
     println!("  Close BID matched: {sig}");
@@ -1084,7 +1488,11 @@ fn cmd_setup(
     println!("  Raw PnL    : {:+.6} USDC", raw_pnl);
     println!("  Fees       : -{fees:.6} USDC");
     println!("  ──────────────────────────────────────────────");
-    println!("  Net PnL    : {:+.6} USDC  ({:+.2}%)", net_pnl, net_pnl / entry_cost * 100.0);
+    println!(
+        "  Net PnL    : {:+.6} USDC  ({:+.2}%)",
+        net_pnl,
+        net_pnl / entry_cost * 100.0
+    );
 
     println!("\n═══════════════════════════════════════════════");
     println!("  Program : {}", manifest::id());
@@ -1108,13 +1516,20 @@ fn main() -> Result<()> {
             ConfigAction::Get => {
                 let path = config_path();
                 println!("Config file : {}", path.display());
-                println!("url         : {}", cfg.url.as_deref().unwrap_or("<default>"));
-                println!("keypair     : {}", cfg.keypair.as_deref().unwrap_or("<default>"));
+                println!(
+                    "url         : {}",
+                    cfg.url.as_deref().unwrap_or("<default>")
+                );
+                println!(
+                    "keypair     : {}",
+                    cfg.keypair.as_deref().unwrap_or("<default>")
+                );
                 println!("\nActive values (flag > config > default):");
                 println!("  url     = {}", cfg.resolve_url(cli.url.as_deref()));
                 let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
                 let default_kp = format!("{home}/.config/solana/id.json");
-                let kp = cfg.resolve_keypair(cli.keypair.as_deref())
+                let kp = cfg
+                    .resolve_keypair(cli.keypair.as_deref())
                     .unwrap_or(&default_kp);
                 println!("  keypair = {kp}");
             }
@@ -1123,12 +1538,20 @@ fn main() -> Result<()> {
                     url: cfg.url,
                     keypair: cfg.keypair,
                 };
-                if let Some(u) = url     { updated.url     = Some(u); }
-                if let Some(k) = keypair { updated.keypair = Some(k); }
+                if let Some(u) = url {
+                    updated.url = Some(u);
+                }
+                if let Some(k) = keypair {
+                    updated.keypair = Some(k);
+                }
                 updated.save()?;
                 println!("Saved to {}", config_path().display());
-                if let Some(u) = &updated.url     { println!("  url     = {u}"); }
-                if let Some(k) = &updated.keypair { println!("  keypair = {k}"); }
+                if let Some(u) = &updated.url {
+                    println!("  url     = {u}");
+                }
+                if let Some(k) = &updated.keypair {
+                    println!("  keypair = {k}");
+                }
             }
         }
         return Ok(());
@@ -1146,16 +1569,30 @@ fn main() -> Result<()> {
             cmd_create_mint(&client, &payer, decimals)?;
         }
 
-        Commands::MintTo { mint, amount, owner } => {
+        Commands::MintTo {
+            mint,
+            amount,
+            recipient,
+        } => {
             let mint = parse_pubkey(&mint)?;
-            let owner = owner.as_deref().map(parse_pubkey).transpose()?.unwrap_or(payer.pubkey());
+            let owner = recipient
+                .as_deref()
+                .map(parse_pubkey)
+                .transpose()?
+                .unwrap_or(payer.pubkey());
             cmd_mint_to(&client, &payer, &mint, &owner, amount)?;
         }
 
         Commands::CreateMarket {
-            quote_mint, base_mint_index, base_decimals,
-            initial_margin_bps, maintenance_margin_bps,
-            pyth_feed, taker_fee_bps, liquidation_buffer_bps,
+            quote_mint,
+            base_mint_index,
+            base_decimals,
+            initial_margin_bps,
+            maintenance_margin_bps,
+            pyth_feed,
+            taker_fee_bps,
+            liquidation_buffer_bps,
+            num_blocks,
         } => {
             let quote_mint = parse_pubkey(&quote_mint)?;
             let pyth = pyth_feed
@@ -1164,9 +1601,17 @@ fn main() -> Result<()> {
                 .transpose()?
                 .unwrap_or_else(|| parse_pubkey(PYTH_SOL_USD_DEVNET).unwrap());
             cmd_create_market(
-                &client, &payer, &quote_mint, base_mint_index, base_decimals,
-                initial_margin_bps, maintenance_margin_bps, pyth,
-                taker_fee_bps, liquidation_buffer_bps,
+                &client,
+                &payer,
+                &quote_mint,
+                base_mint_index,
+                base_decimals,
+                initial_margin_bps,
+                maintenance_margin_bps,
+                pyth,
+                taker_fee_bps,
+                liquidation_buffer_bps,
+                num_blocks,
             )?;
         }
 
@@ -1177,42 +1622,75 @@ fn main() -> Result<()> {
 
         Commands::ClaimSeat { market, trader } => {
             let market = parse_pubkey(&market)?;
-            let trader = trader.as_deref().map(parse_pubkey).transpose()?.unwrap_or(payer.pubkey());
+            let trader = trader
+                .as_deref()
+                .map(parse_pubkey)
+                .transpose()?
+                .unwrap_or(payer.pubkey());
             cmd_claim_seat(&client, &payer, &market, &trader)?;
         }
 
-        Commands::Deposit { market, quote_mint, amount } => {
+        Commands::ReleaseSeat { market } => {
+            let market = parse_pubkey(&market)?;
+            cmd_release_seat(&client, &payer, &market)?;
+        }
+
+        Commands::Deposit {
+            market,
+            quote_mint,
+            amount,
+        } => {
             let market = parse_pubkey(&market)?;
             let quote_mint = parse_pubkey(&quote_mint)?;
             cmd_deposit(&client, &payer, &market, &quote_mint, amount)?;
         }
 
-        Commands::Withdraw { market, quote_mint, amount } => {
+        Commands::Withdraw {
+            market,
+            quote_mint,
+            amount,
+        } => {
             let market = parse_pubkey(&market)?;
             let quote_mint = parse_pubkey(&quote_mint)?;
             cmd_withdraw(&client, &payer, &market, &quote_mint, amount)?;
         }
 
         Commands::PlaceOrder {
-            market, base_atoms, price_mantissa, price_exponent,
-            is_bid, order_type, last_valid_slot,
+            market,
+            base_atoms,
+            price_mantissa,
+            price_exponent,
+            is_bid,
+            order_type,
+            last_valid_slot,
         } => {
             let market = parse_pubkey(&market)?;
             let ot = parse_order_type(&order_type)?;
             cmd_place_order(
-                &client, &payer, &market, base_atoms,
-                price_mantissa, price_exponent, is_bid, ot, last_valid_slot,
+                &client,
+                &payer,
+                &market,
+                base_atoms,
+                price_mantissa,
+                price_exponent,
+                is_bid,
+                ot,
+                last_valid_slot,
             )?;
         }
 
-        Commands::CancelOrder { market, sequence_number } => {
+        Commands::CancelOrder {
+            market,
+            sequence_number,
+        } => {
             let market = parse_pubkey(&market)?;
             cmd_cancel_order(&client, &payer, &market, sequence_number)?;
         }
 
-        Commands::Delegate { market } => {
+        Commands::Delegate { market, quote_mint } => {
             let market = parse_pubkey(&market)?;
-            cmd_delegate(&client, &payer, &market)?;
+            let quote_mint = parse_pubkey(&quote_mint)?;
+            cmd_delegate(&client, &payer, &market, &quote_mint)?;
         }
 
         Commands::CrankFunding { market, pyth_feed } => {
@@ -1231,7 +1709,11 @@ fn main() -> Result<()> {
             cmd_liquidate(&client, &payer, &market, &trader)?;
         }
 
-        Commands::FetchPrice { feed, quote_decimals, base_decimals } => {
+        Commands::FetchPrice {
+            feed,
+            quote_decimals,
+            base_decimals,
+        } => {
             let feed = feed
                 .as_deref()
                 .map(parse_pubkey)
@@ -1240,9 +1722,23 @@ fn main() -> Result<()> {
             cmd_fetch_price(&client, &feed, quote_decimals, base_decimals)?;
         }
 
-        Commands::OpenLong { market, leverage, margin_atoms, quote_decimals, base_decimals } => {
+        Commands::OpenLong {
+            market,
+            leverage,
+            margin_atoms,
+            quote_decimals,
+            base_decimals,
+        } => {
             let market = parse_pubkey(&market)?;
-            cmd_open_long(&client, &payer, &market, leverage, margin_atoms, quote_decimals, base_decimals)?;
+            cmd_open_long(
+                &client,
+                &payer,
+                &market,
+                leverage,
+                margin_atoms,
+                quote_decimals,
+                base_decimals,
+            )?;
         }
 
         Commands::MarketInfo { market } => {
@@ -1257,9 +1753,58 @@ fn main() -> Result<()> {
             taker_fee_bps,
         } => {
             cmd_setup(
-                &client, &er, &payer,
-                base_mint_index, initial_margin_bps, maintenance_margin_bps, taker_fee_bps,
+                &client,
+                &er,
+                &payer,
+                base_mint_index,
+                initial_margin_bps,
+                maintenance_margin_bps,
+                taker_fee_bps,
             )?;
+        }
+
+        Commands::EphemeralInitGlobalVault { mint } => {
+            let mint = parse_pubkey(&mint)?;
+            cmd_ephemeral_init_global_vault(&client, &payer, &mint)?;
+        }
+
+        Commands::EphemeralInitAta { mint, owner } => {
+            let mint = parse_pubkey(&mint)?;
+            let owner = owner
+                .as_deref()
+                .map(parse_pubkey)
+                .transpose()?
+                .unwrap_or(payer.pubkey());
+            cmd_ephemeral_init_ata(&client, &payer, &owner, &mint)?;
+        }
+
+        Commands::EphemeralDepositSpl {
+            mint,
+            amount,
+            recipient,
+        } => {
+            let mint = parse_pubkey(&mint)?;
+            let recipient = recipient
+                .as_deref()
+                .map(parse_pubkey)
+                .transpose()?
+                .unwrap_or(payer.pubkey());
+            cmd_ephemeral_deposit_spl(&client, &payer, &mint, &recipient, amount)?;
+        }
+
+        Commands::EphemeralDelegateAta { mint } => {
+            let mint = parse_pubkey(&mint)?;
+            cmd_ephemeral_delegate_ata(&client, &payer, &mint)?;
+        }
+
+        Commands::EphemeralManifestDeposit {
+            market,
+            quote_mint,
+            amount,
+        } => {
+            let market = parse_pubkey(&market)?;
+            let quote_mint = parse_pubkey(&quote_mint)?;
+            cmd_ephemeral_manifest_deposit(&client, &payer, &market, &quote_mint, amount)?;
         }
 
         // Handled above before the network/keypair setup; unreachable here.
