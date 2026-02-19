@@ -83,7 +83,7 @@ pub(crate) fn process_swap_core(
         global_trade_accounts_opts,
     } = swap_context;
 
-    let (existing_seat_index, trader_index, initial_base_atoms, initial_quote_atoms) = {
+    let (_existing_seat_index, trader_index, initial_base_atoms, initial_quote_atoms) = {
         let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
         let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
 
@@ -340,48 +340,37 @@ pub(crate) fn process_swap_core(
     }
 
     let extra_base_atoms: BaseAtoms = end_base_atoms.checked_sub(initial_base_atoms)?;
-    let extra_quote_atoms: QuoteAtoms = end_quote_atoms.checked_sub(initial_quote_atoms)?;
 
-    // Only USDC (quote) transfers — base is virtual in perps.
-    // CPI to token program (ephemeral-spl-token on ER)
+    // In perps, the matching engine no longer debits/credits quote during fills.
+    // Token transfers are simpler: LONG deposits margin, SHORT has no transfer.
     if is_base_in {
-        // Opening short: no base token transfer. Give quote profit back.
-        if extra_quote_atoms.as_u64() > 0 {
-            let (_, quote_vault_bump) = crate::validation::get_vault_address(market.key, dynamic_account.fixed.get_quote_mint());
-            spl_token_transfer_from_vault_to_trader(
-                &token_program_quote,
-                &quote_vault,
-                &trader_quote_account,
-                extra_quote_atoms.as_u64(),
-                market.key,
-                quote_vault_bump,
-                dynamic_account.fixed.get_quote_mint(),
-            )?;
-        }
+        // Opening short: no token transfer. Base is virtual, margin is existing USDC.
     } else {
-        // Going long: take USDC from trader. No base token transfer out.
-        let quote_atoms_to_transfer: u64 = in_atoms.saturating_sub(extra_quote_atoms.as_u64());
+        // Going long: deposit full in_atoms as margin into vault.
+        // The matching engine only updates position tracking, so the virtual
+        // deposit (done earlier) stays in the balance as real margin.
         spl_token_transfer_from_trader_to_vault(
             &token_program_quote,
             &trader_quote_account,
             &quote_vault,
             &owner,
-            quote_atoms_to_transfer,
+            in_atoms,
         )?;
     }
 
-    if existing_seat_index == NIL {
-        dynamic_account.release_seat(owner.key)?;
-    } else {
-        // Withdraw in case there already was a seat so it doesnt mess with their
-        // balances. Need to withdraw base and quote in case the order wasnt fully
-        // filled.
-        dynamic_account.withdraw(trader_index, extra_base_atoms.as_u64(), true)?;
-        dynamic_account.withdraw(trader_index, extra_quote_atoms.as_u64(), false)?;
-
-        // Store current global cumulative funding checkpoint for lazy settlement.
-        dynamic_account.store_cumulative_for_trader(trader_index);
+    // Clean up virtual base atoms (from the deposit at line 169).
+    // For LONG: do NOT withdraw extra quote — it IS the margin deposit.
+    // For SHORT: extra_quote is 0 (matching no longer credits quote to taker).
+    dynamic_account.withdraw(trader_index, extra_base_atoms.as_u64(), true)?;
+    if is_base_in {
+        let extra_quote_atoms: u64 =
+            end_quote_atoms.as_u64().saturating_sub(initial_quote_atoms.as_u64());
+        dynamic_account.withdraw(trader_index, extra_quote_atoms, false)?;
     }
+
+    // Store current global cumulative funding checkpoint for lazy settlement.
+    // In perps, never release the seat — trader has position + margin.
+    dynamic_account.store_cumulative_for_trader(trader_index);
     // Verify that there wasnt a reverse order that took the only spare block.
     require!(
         dynamic_account.has_free_block(),

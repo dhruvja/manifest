@@ -1370,8 +1370,14 @@ impl<
             // only the number of atoms required for the trade were brought
             // over.  The extra one that is no longer needed for taker rounding
             // is not brought over, so dont credit the maker for it.
+            // In perps, fills only update position tracking (below). No spot-like
+            // quote/base balance transfers between maker and taker.
+            //
+            // However, when a maker's resting BID fills (!is_bid), the quote that
+            // was locked when the BID was placed must be freed back to the maker's
+            // balance. The freed amount = previous_allocated - new_allocated, which
+            // includes both the traded quote and any rounding bonus atom.
             if !is_bid && !is_global {
-                // These are only used when is_bid.
                 let previous_maker_quote_atoms_allocated: QuoteAtoms =
                     matched_price.checked_quote_for_base(maker_order.get_num_base_atoms(), true)?;
                 let new_maker_quote_atoms_allocated: QuoteAtoms = matched_price
@@ -1381,64 +1387,18 @@ impl<
                             .checked_sub(base_atoms_traded)?,
                         true,
                     )?;
-                let bonus_atom_or_zero: QuoteAtoms = previous_maker_quote_atoms_allocated
-                    .checked_sub(new_maker_quote_atoms_allocated)?
-                    .checked_sub(quote_atoms_traded)?;
+                let freed_quote: QuoteAtoms = previous_maker_quote_atoms_allocated
+                    .checked_sub(new_maker_quote_atoms_allocated)?;
 
-                // The bonus atom isnt actually traded, it is recouped to the
-                // maker though from the tokens that they had been using to back
-                // the order since it is no longer needed. So we do not need to
-                // update the fill logs or amounts.
                 update_balance(
                     fixed,
                     dynamic,
                     maker_trader_index,
-                    is_bid,
+                    is_bid, // false = quote side
                     true,
-                    bonus_atom_or_zero.as_u64(),
+                    freed_quote.as_u64(),
                 )?;
             }
-
-            // Increase maker from the matched amount in the trade.
-            // In perps, only credit quote to maker. Skip base credits since base
-            // is virtual and base_withdrawable_balance stores cumulative funding.
-            // Position tracking is handled by update_perps_position below.
-            if is_bid {
-                update_balance(
-                    fixed,
-                    dynamic,
-                    maker_trader_index,
-                    false, // quote side
-                    true,
-                    quote_atoms_traded.into(),
-                )?;
-            }
-            // Decrease taker
-            update_balance(
-                fixed,
-                dynamic,
-                trader_index,
-                !is_bid,
-                false,
-                if is_bid {
-                    quote_atoms_traded.into()
-                } else {
-                    base_atoms_traded.into()
-                },
-            )?;
-            // Increase taker
-            update_balance(
-                fixed,
-                dynamic,
-                trader_index,
-                is_bid,
-                true,
-                if is_bid {
-                    base_atoms_traded.into()
-                } else {
-                    quote_atoms_traded.into()
-                },
-            )?;
 
             // Update perps position tracking for maker and taker
             update_perps_position(

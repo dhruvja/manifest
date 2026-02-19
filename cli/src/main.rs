@@ -13,12 +13,11 @@ use manifest::{
         batch_update::{CancelOrderParams, PlaceOrderParams},
         batch_update_instruction,
         claim_seat_instruction::claim_seat_instruction,
-        crank_funding_instruction,
-        create_market_instructions,
-        deposit_instruction,
-        expand_market_instruction,
-        liquidate_instruction,
-        withdraw_instruction,
+        crank_funding_instruction, create_market_instructions,
+        deposit_instruction, deposit_instruction_with_vault, expand_market_instruction, expand_market_n_instruction,
+        liquidate_instruction, release_seat_instruction,
+        swap_instruction::swap_instruction_with_vaults,
+        withdraw_instruction, withdraw_instruction_with_vault,
         ManifestInstruction,
     },
     state::OrderType,
@@ -45,7 +44,7 @@ const DEFAULT_URL: &str = "https://api.devnet.solana.com";
 const ER_URL: &str = "https://devnet.magicblock.app";
 const DELEGATION_PROGRAM_ID: &str = "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh";
 /// Pyth V2 SOL/USD devnet price account
-const PYTH_SOL_USD_DEVNET: &str = "J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix";
+const PYTH_SOL_USD_DEVNET: &str = "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu";
 /// Pyth PriceUpdateV3 SOL/USD on MagicBlock ER
 const PYTH_SOL_USD_ER: &str = "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu";
 
@@ -323,6 +322,26 @@ enum Commands {
         /// Base token decimals (default 9 for SOL)
         #[arg(long, default_value = "9")]
         base_decimals: u8,
+    },
+
+    /// Swap via the Swap instruction (IOC taker fill with token transfer).
+    /// Uses ephemeral ATAs on ER. Fetches oracle price automatically.
+    Swap {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Quote mint address
+        #[arg(long)]
+        quote_mint: String,
+        /// Amount of quote atoms to spend (for long) or base atoms to sell (for short)
+        #[arg(long)]
+        in_atoms: u64,
+        /// Minimum output atoms (0 = accept any)
+        #[arg(long, default_value = "0")]
+        min_out_atoms: u64,
+        /// Direction: true = short (sell base), false = long (buy base)
+        #[arg(long, default_value = "false")]
+        is_base_in: bool,
     },
 
     /// Show basic info about a market account
@@ -830,6 +849,47 @@ fn cmd_open_long(
     Ok(())
 }
 
+fn cmd_swap(
+    client: &RpcClient,
+    payer: &Keypair,
+    market: &Pubkey,
+    quote_mint: &Pubkey,
+    in_atoms: u64,
+    min_out_atoms: u64,
+    is_base_in: bool,
+) -> Result<()> {
+    let direction = if is_base_in { "SHORT (sell base)" } else { "LONG (buy base)" };
+    println!("Swap {direction} on market {market}");
+    println!("  in_atoms     : {in_atoms}");
+    println!("  min_out_atoms: {min_out_atoms}");
+
+    let (trader_ata, _) = get_ephemeral_ata(&payer.pubkey(), quote_mint);
+    let (vault_ata, _) = get_ephemeral_ata(market, quote_mint);
+    println!("  Trader ATA   : {trader_ata}");
+    println!("  Vault ATA    : {vault_ata}");
+
+    let ix = swap_instruction_with_vaults(
+        market,
+        &payer.pubkey(),
+        &Pubkey::default(),  // base_mint (virtual, unused)
+        quote_mint,
+        &Pubkey::default(),  // trader_base (virtual, unused)
+        &trader_ata,
+        &Pubkey::default(),  // vault_base (virtual, unused)
+        &vault_ata,
+        in_atoms,
+        min_out_atoms,
+        is_base_in,
+        true, // is_exact_in
+        Pubkey::default(),   // token_program_base (unused)
+        ephemeral_spl_token_id(),
+        false,
+    );
+    let sig = send(client, &[ix], &[payer])?;
+    println!("Signature: {sig}");
+    Ok(())
+}
+
 fn cmd_cancel_order(
     client: &RpcClient,
     payer: &Keypair,
@@ -1243,6 +1303,18 @@ fn main() -> Result<()> {
         Commands::OpenLong { market, leverage, margin_atoms, quote_decimals, base_decimals } => {
             let market = parse_pubkey(&market)?;
             cmd_open_long(&client, &payer, &market, leverage, margin_atoms, quote_decimals, base_decimals)?;
+        }
+
+        Commands::Swap {
+            market,
+            quote_mint,
+            in_atoms,
+            min_out_atoms,
+            is_base_in,
+        } => {
+            let market = parse_pubkey(&market)?;
+            let quote_mint = parse_pubkey(&quote_mint)?;
+            cmd_swap(&client, &payer, &market, &quote_mint, in_atoms, min_out_atoms, is_base_in)?;
         }
 
         Commands::MarketInfo { market } => {

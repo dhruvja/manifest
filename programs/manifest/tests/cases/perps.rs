@@ -111,9 +111,9 @@ async fn test_open_short_position() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_initial_margin_reject() -> anyhow::Result<()> {
-    // Use 120% initial margin. For a short: equity = deposit + proceeds + pnl(0)
-    // required = notional * 1.2. With deposit=1 USDC, notional=10:
-    // equity = 1 + 10 = 11, required = 12 → 11 < 12 → FAILS
+    // Use 120% initial margin. In perps, fills don't credit quote to taker.
+    // equity = deposit + pnl(0) = 1, required = notional * 1.2 = 12.
+    // 1 < 12 → FAILS
     let pyth_key = Pubkey::new_unique();
     let pyth_data = build_mock_pyth_data(10_0000_0000, -8, 100_000);
 
@@ -148,7 +148,7 @@ async fn test_initial_margin_reject() -> anyhow::Result<()> {
         .await?;
 
     // Payer tries to sell 1 SOL (go short)
-    // equity = 1 + 10 = 11 USDC, required = 10 * 120% = 12 USDC → FAIL
+    // equity = 1 + 0 = 1 USDC, required = 10 * 120% = 12 USDC → FAIL
     let result = test_fixture.swap(SOL, 0, true, true).await;
     assert!(
         result.is_err(),
@@ -162,8 +162,9 @@ async fn test_initial_margin_reject() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_initial_margin_accept() -> anyhow::Result<()> {
-    // Same 120% margin but with enough deposit (3 USDC)
-    // equity = 3 + 10 = 13, required = 12 → 13 >= 12 → PASSES
+    // Same 120% margin but with enough deposit. In perps, fills don't
+    // credit quote, so equity = deposit + pnl(0) = deposit.
+    // Need deposit >= required = 12. Use 13 USDC for safety.
     let pyth_key = Pubkey::new_unique();
     let pyth_data = build_mock_pyth_data(10_0000_0000, -8, 100_000);
 
@@ -172,7 +173,7 @@ async fn test_initial_margin_accept() -> anyhow::Result<()> {
     let second_keypair = test_fixture.second_keypair.insecure_clone();
 
     test_fixture.claim_seat().await?;
-    test_fixture.deposit(Token::USDC, 3 * USDC_UNIT_SIZE).await?;
+    test_fixture.deposit(Token::USDC, 13 * USDC_UNIT_SIZE).await?;
 
     test_fixture
         .claim_seat_for_keypair(&second_keypair)
@@ -197,7 +198,7 @@ async fn test_initial_margin_accept() -> anyhow::Result<()> {
         )
         .await?;
 
-    // Payer sells 1 SOL (go short) → should succeed
+    // Payer sells 1 SOL (go short) → equity = 13, required = 12 → PASSES
     test_fixture.swap(SOL, 0, true, true).await?;
 
     let (payer_pos, _) = test_fixture
@@ -629,7 +630,7 @@ async fn test_partial_liquidation() -> anyhow::Result<()> {
         )
         .await?;
 
-    // Payer sells 1 SOL → short, margin = 2 + 10 = 12 USDC
+    // Payer sells 1 SOL → short, margin = 2 USDC (deposit only)
     test_fixture.swap(SOL, 0, true, true).await?;
 
     let (pos, _) = test_fixture.market_fixture.get_trader_position(&payer).await;
@@ -637,7 +638,6 @@ async fn test_partial_liquidation() -> anyhow::Result<()> {
 
     // Set oracle to 11.5 USDC and do the first-ever crank.
     // Since last_funding_ts == 0, crank just caches oracle — no funding applied.
-    // In perps, margin stays as deposit (2 USDC) — swap doesn't credit quote.
     // equity = 2 + (10 - 11.5) = 0.5 USDC, maintenance = 11.5 * 5% = 0.575 → liquidatable
     // target_bps = 700, equity_bps = 434, f = 266/450 ≈ 0.59 → partial liquidation
     let new_pyth_data = build_mock_pyth_data(11_5000_0000, -8, 100_000);
@@ -795,7 +795,7 @@ async fn test_full_liquidation_deeply_underwater() -> anyhow::Result<()> {
     test_fixture.swap(SOL, 0, true, true).await?;
 
     // Price jumps to 100 USDC → hugely underwater
-    // equity = 12 + (10 - 100) = 12 - 90 = -78
+    // equity = 2 + (10 - 100) = 2 - 90 = -88 (before funding, even more negative after)
     let new_pyth_data = build_mock_pyth_data(100_0000_0000, -8, 100_000);
     {
         let mut ctx = test_fixture.context.borrow_mut();
@@ -1328,6 +1328,86 @@ async fn test_withdraw_rejected_insufficient_margin() -> anyhow::Result<()> {
     assert!(
         result.is_err(),
         "Withdrawal should fail: equity would drop below maintenance margin"
+    );
+
+    Ok(())
+}
+
+// ─── Test 19: 10x leverage position ──────────────────────────────
+// Verifies the matching engine correctly supports high leverage.
+// With 10% initial margin, $100 deposit opens a $1000 position (10x).
+// Previously broken: engine debited full notional from quote balance (spot-like),
+// causing underflow at high leverage.
+
+#[tokio::test]
+async fn test_10x_leverage_position() -> anyhow::Result<()> {
+    let pyth_key = Pubkey::new_unique();
+    let pyth_data = build_mock_pyth_data(10_0000_0000, -8, 100_000);
+
+    // 10% initial margin, 5% maintenance
+    let mut test_fixture =
+        TestFixture::new_with_pyth(pyth_key, pyth_data, 1000, 500).await;
+    let second_keypair = test_fixture.second_keypair.insecure_clone();
+    let payer = test_fixture.payer();
+
+    test_fixture.claim_seat().await?;
+    test_fixture
+        .deposit(Token::USDC, 100 * USDC_UNIT_SIZE)
+        .await?;
+
+    test_fixture
+        .claim_seat_for_keypair(&second_keypair)
+        .await?;
+    test_fixture
+        .deposit_for_keypair(Token::USDC, 2100 * USDC_UNIT_SIZE, &second_keypair)
+        .await?;
+
+    test_fixture.crank_funding(&pyth_key).await?;
+
+    // Second places BID for 200 SOL at 10 USDC (locks 2000 USDC).
+    // Extra 100 SOL so there's remaining liquidity for mark price calculation.
+    test_fixture
+        .place_order_for_keypair(
+            Side::Bid,
+            200 * SOL,
+            PRICE_10_MANTISSA,
+            PRICE_10_EXPONENT,
+            0,
+            OrderType::Limit,
+            &second_keypair,
+        )
+        .await?;
+
+    // Payer sells 100 SOL → SHORT at 10 USDC/SOL, notional = $1000
+    // With old spot-like engine: checked_sub(100, 1000) → underflow!
+    // With perps fix: engine only updates position tracking, margin untouched.
+    // Margin check: equity = 100 + 0 = 100, required = 1000 * 10% = 100. 100 >= 100 → passes.
+    test_fixture.swap(100 * SOL, 0, true, true).await?;
+
+    let (pos, cost) = test_fixture
+        .market_fixture
+        .get_trader_position(&payer)
+        .await;
+    assert_eq!(
+        pos,
+        -((100 * SOL) as i64),
+        "Payer should be SHORT 100 SOL"
+    );
+    assert_eq!(
+        cost,
+        1000 * USDC_UNIT_SIZE,
+        "Cost basis should be 1000 USDC"
+    );
+
+    // Verify margin is untouched (still 100 USDC)
+    let balance = test_fixture
+        .market_fixture
+        .get_quote_balance_atoms(&payer)
+        .await;
+    assert_eq!(
+        balance,
+        100 * USDC_UNIT_SIZE,
+        "Margin should remain at 100 USDC after 10x leveraged position"
     );
 
     Ok(())
