@@ -108,9 +108,28 @@ function modifyIdlCore(programName) {
 
     updateIdlTypes(idl);
 
-    // Patch instructions that shank cannot fully extract (e.g. params with Pubkey fields).
-    // We always override accounts and discriminant for these, since shank emits them
-    // with empty accounts when it encounters unsupported types.
+    // Update program ID to deployed perps address
+    if (!idl.metadata) idl.metadata = {};
+    idl.metadata.address = '3TN9efyWfeG3s1ZDZdbYtLJwMdWRRtM2xPGsM2T9QrUa';
+
+    // Remove duplicate instructions (e.g. stale SwapV2 with wrong discriminant).
+    // Keep only the last occurrence of each name (the one with correct discriminant).
+    {
+      const seen = new Set();
+      for (let i = idl.instructions.length - 1; i >= 0; i--) {
+        const name = idl.instructions[i].name;
+        if (seen.has(name)) {
+          idl.instructions.splice(i, 1);
+        } else {
+          seen.add(name);
+        }
+      }
+    }
+
+    // Patch all instruction accounts to match the actual instruction builders.
+    // Shank annotations in instruction.rs are stale (still reference spot-market
+    // accounts like base_vault/base_mint). The ground truth is the Rust builders
+    // in instruction_builders/*.rs.
     const patchInstruction = (name, discriminantValue, accounts) => {
       const existing = idl.instructions.find((i) => i.name === name);
       if (existing) {
@@ -120,6 +139,140 @@ function modifyIdlCore(programName) {
         idl.instructions.push({ name, discriminant: { type: 'u8', value: discriminantValue }, accounts, args: [] });
       }
     };
+
+    // 0 - CreateMarket: perps market PDA from (base_mint_index, quote_mint)
+    patchInstruction('CreateMarket', 0, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Market creator / payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Market PDA, seeds=[b"market", &[base_mint_index], quote_mint]'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'quoteMint', isMut: false, isSigner: false, docs: ['Quote mint (e.g. USDC)'] },
+      { name: 'quoteVault', isMut: true, isSigner: false, docs: ['Quote vault ATA owned by market PDA'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['SPL Token program'] },
+      { name: 'tokenProgram22', isMut: false, isSigner: false, docs: ['SPL Token-2022 program'] },
+      { name: 'associatedTokenProgram', isMut: false, isSigner: false, docs: ['Associated Token Account program'] },
+      { name: 'ephemeralVaultAta', isMut: true, isSigner: false, docs: ['Ephemeral SPL token vault ATA'] },
+      { name: 'ephemeralSplToken', isMut: false, isSigner: false, docs: ['Ephemeral SPL Token program (MagicBlock)'] },
+    ]);
+
+    // 1 - ClaimSeat: matches builders
+    patchInstruction('ClaimSeat', 1, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+    ]);
+
+    // 2 - Deposit: payer is readonly in builder
+    patchInstruction('Deposit', 2, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'traderToken', isMut: true, isSigner: false, docs: ['Trader token account'] },
+      { name: 'vault', isMut: true, isSigner: false, docs: ['Vault PDA, seeds are [b\'vault\', market, mint]'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Quote mint'] },
+    ]);
+
+    // 3 - Withdraw: payer is readonly in builder
+    patchInstruction('Withdraw', 3, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'traderToken', isMut: true, isSigner: false, docs: ['Trader token account'] },
+      { name: 'vault', isMut: true, isSigner: false, docs: ['Vault PDA, seeds are [b\'vault\', market, mint]'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Quote mint'] },
+    ]);
+
+    // 4 - Swap: perps only uses quote side (base is virtual)
+    patchInstruction('Swap', 4, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'traderQuote', isMut: true, isSigner: false, docs: ['Trader quote token account'] },
+      { name: 'quoteVault', isMut: true, isSigner: false, docs: ['Quote vault PDA'] },
+      { name: 'tokenProgramQuote', isMut: false, isSigner: false, docs: ['Token program for quote'] },
+    ]);
+
+    // 5 - Expand: matches builders
+    patchInstruction('Expand', 5, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+    ]);
+
+    // 6 - BatchUpdate: matches builders (global accounts are optional, included dynamically)
+    patchInstruction('BatchUpdate', 6, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+    ]);
+
+    // 7 - GlobalCreate: matches builders
+    patchInstruction('GlobalCreate', 7, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Mint for this global account'] },
+      { name: 'globalVault', isMut: true, isSigner: false, docs: ['Global vault'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+    ]);
+
+    // 8 - GlobalAddTrader: matches builders
+    patchInstruction('GlobalAddTrader', 8, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+    ]);
+
+    // 9 - GlobalDeposit: payer is readonly in builder
+    patchInstruction('GlobalDeposit', 9, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Mint for this global account'] },
+      { name: 'globalVault', isMut: true, isSigner: false, docs: ['Global vault'] },
+      { name: 'traderToken', isMut: true, isSigner: false, docs: ['Trader token account'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+    ]);
+
+    // 10 - GlobalWithdraw: payer is readonly in builder
+    patchInstruction('GlobalWithdraw', 10, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Mint for this global account'] },
+      { name: 'globalVault', isMut: true, isSigner: false, docs: ['Global vault'] },
+      { name: 'traderToken', isMut: true, isSigner: false, docs: ['Trader token account'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+    ]);
+
+    // 11 - GlobalEvict: trader_token and evictee_token are writable in builder
+    patchInstruction('GlobalEvict', 11, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+      { name: 'mint', isMut: false, isSigner: false, docs: ['Mint for this global account'] },
+      { name: 'globalVault', isMut: true, isSigner: false, docs: ['Global vault'] },
+      { name: 'traderToken', isMut: true, isSigner: false, docs: ['Trader token account'] },
+      { name: 'evicteeToken', isMut: true, isSigner: false, docs: ['Evictee token account'] },
+      { name: 'tokenProgram', isMut: false, isSigner: false, docs: ['Token program'] },
+    ]);
+
+    // 12 - GlobalClean: matches builders
+    patchInstruction('GlobalClean', 12, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer for this tx, receiver of rent deposit'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'global', isMut: true, isSigner: false, docs: ['Global account'] },
+    ]);
+
+    // 13 - SwapV2: perps only uses quote side, separates payer and owner
+    patchInstruction('SwapV2', 13, [
+      { name: 'payer', isMut: false, isSigner: true, docs: ['Payer (gas)'] },
+      { name: 'owner', isMut: false, isSigner: true, docs: ['Owner of the token accounts'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
+      { name: 'traderQuote', isMut: true, isSigner: false, docs: ['Trader quote token account'] },
+      { name: 'quoteVault', isMut: true, isSigner: false, docs: ['Quote vault PDA'] },
+      { name: 'tokenProgramQuote', isMut: false, isSigner: false, docs: ['Token program for quote'] },
+    ]);
+
+    // 14 - DelegateMarket
     patchInstruction('DelegateMarket', 14, [
       { name: 'payer', isMut: true, isSigner: true, docs: ['Payer and market creator'] },
       { name: 'market', isMut: true, isSigner: false, docs: ['Market PDA to delegate'] },
@@ -130,21 +283,34 @@ function modifyIdlCore(programName) {
       { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
       { name: 'buffer', isMut: true, isSigner: false, docs: ['Buffer account for delegation'] },
     ]);
+
+    // 15 - CommitMarket
     patchInstruction('CommitMarket', 15, [
       { name: 'payer', isMut: true, isSigner: true, docs: ['Payer'] },
       { name: 'market', isMut: true, isSigner: false, docs: ['Delegated market account'] },
       { name: 'magicProgram', isMut: false, isSigner: false, docs: ['MagicBlock magic program'] },
       { name: 'magicContext', isMut: false, isSigner: false, docs: ['MagicBlock magic context'] },
     ]);
+
+    // 16 - Liquidate
     patchInstruction('Liquidate', 16, [
       { name: 'liquidator', isMut: true, isSigner: true, docs: ['Liquidator'] },
       { name: 'market', isMut: true, isSigner: false, docs: ['Perps market account'] },
       { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
     ]);
+
+    // 17 - CrankFunding
     patchInstruction('CrankFunding', 17, [
       { name: 'payer', isMut: true, isSigner: true, docs: ['Payer / cranker'] },
       { name: 'market', isMut: true, isSigner: false, docs: ['Perps market account'] },
       { name: 'pythPriceFeed', isMut: false, isSigner: false, docs: ['Pyth price feed account'] },
+    ]);
+
+    // 18 - ReleaseSeat
+    patchInstruction('ReleaseSeat', 18, [
+      { name: 'payer', isMut: true, isSigner: true, docs: ['Payer / trader releasing seat'] },
+      { name: 'market', isMut: true, isSigner: false, docs: ['Account holding all market state'] },
+      { name: 'systemProgram', isMut: false, isSigner: false, docs: ['System program'] },
     ]);
 
     for (const instruction of idl.instructions) {
@@ -152,7 +318,12 @@ function modifyIdlCore(programName) {
       instruction.args = [];
       switch (instruction.name) {
         case 'CreateMarket': {
-          // Create market does not have params
+          instruction.args.push({
+            name: 'params',
+            type: {
+              defined: 'CreateMarketParams',
+            },
+          });
           break;
         }
         case 'ClaimSeat': {
@@ -225,10 +396,8 @@ function modifyIdlCore(programName) {
         case 'GlobalAddTrader': {
           break;
         }
-        case 'GlobalClaimSeat': {
-          break;
-        }
-        case 'GlobalCleanOrder': {
+        case 'ReleaseSeat': {
+          // Release seat does not have params
           break;
         }
         case 'GlobalDeposit': {
@@ -305,6 +474,26 @@ function modifyIdlCore(programName) {
               name: 'traderToLiquidate',
               type: 'publicKey',
             },
+          ],
+        },
+      });
+    }
+
+    // CreateMarketParams — perps market creation params (shank cannot extract due to Pubkey field)
+    if (!idl.types.find((t) => t.name === 'CreateMarketParams')) {
+      idl.types.push({
+        name: 'CreateMarketParams',
+        type: {
+          kind: 'struct',
+          fields: [
+            { name: 'baseMintIndex', type: 'u8' },
+            { name: 'baseMintDecimals', type: 'u8' },
+            { name: 'initialMarginBps', type: 'u64' },
+            { name: 'maintenanceMarginBps', type: 'u64' },
+            { name: 'pythFeedAccount', type: 'publicKey' },
+            { name: 'takerFeeBps', type: 'u64' },
+            { name: 'liquidationBufferBps', type: 'u64' },
+            { name: 'numBlocks', type: 'u32' },
           ],
         },
       });
