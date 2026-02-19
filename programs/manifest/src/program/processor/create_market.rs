@@ -2,27 +2,32 @@ use std::{cell::Ref, mem::size_of};
 
 use crate::{
     logs::{emit_stack, CreateMarketLog},
-    program::invoke,
+    program::{get_mut_dynamic_account, invoke},
     require,
-    state::MarketFixed,
+    state::{constants::MARKET_BLOCK_SIZE, MarketFixed},
     utils::create_account,
     validation::{
-        get_market_address, get_vault_address, loaders::CreateMarketContext, ManifestAccountInfo,
+        get_market_address, loaders::CreateMarketContext, ManifestAccountInfo,
     },
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use hypertree::{get_mut_helper, trace};
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, program_pack::Pack, pubkey::Pubkey,
-    rent::Rent, sysvar::Sysvar,
+    account_info::AccountInfo,
+    entrypoint::ProgramResult,
+    instruction::{AccountMeta, Instruction},
+    program_pack::Pack,
+    pubkey::Pubkey,
+    rent::Rent,
+    sysvar::Sysvar,
 };
+use spl_associated_token_account;
 use spl_token_2022::{
     extension::{
         mint_close_authority::MintCloseAuthority, permanent_delegate::PermanentDelegate,
-        BaseStateWithExtensions, ExtensionType, PodStateWithExtensions, StateWithExtensions,
+        BaseStateWithExtensions, StateWithExtensions,
     },
-    pod::PodMint,
-    state::{Account, Mint},
+    state::Mint,
 };
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -34,6 +39,7 @@ pub struct CreateMarketParams {
     pub pyth_feed_account: Pubkey,
     pub taker_fee_bps: u64,
     pub liquidation_buffer_bps: u64,
+    pub num_blocks: u32,
 }
 
 impl CreateMarketParams {
@@ -46,6 +52,7 @@ impl CreateMarketParams {
         pyth_feed_account: Pubkey,
         taker_fee_bps: u64,
         liquidation_buffer_bps: u64,
+        num_blocks: u32,
     ) -> Self {
         CreateMarketParams {
             base_mint_index,
@@ -55,6 +62,7 @@ impl CreateMarketParams {
             pyth_feed_account,
             taker_fee_bps,
             liquidation_buffer_bps,
+            num_blocks,
         }
     }
 }
@@ -104,6 +112,9 @@ pub(crate) fn process_create_market(
         system_program,
         token_program,
         token_program_22,
+        associated_token_program,
+        ephemeral_vault_ata,
+        ephemeral_spl_token,
     } = create_market_context;
 
     // Check token-2022 extensions on quote mint
@@ -132,6 +143,9 @@ pub(crate) fn process_create_market(
     {
         let rent: Rent = Rent::get()?;
 
+        solana_program::msg!("base mint index: {}", params.base_mint_index);
+        solana_program::msg!("quote mint: {}", quote_mint.info.key);
+
         // Create the market PDA account using base_mint_index seed
         let (_market_key, market_bump) =
             get_market_address(params.base_mint_index, quote_mint.info.key);
@@ -147,17 +161,20 @@ pub(crate) fn process_create_market(
             quote_mint.info.key.as_ref().to_vec(),
             vec![market_bump],
         ];
+        let total_size: u64 =
+            (size_of::<MarketFixed>() + params.num_blocks as usize * MARKET_BLOCK_SIZE) as u64;
         create_account(
             payer.as_ref(),
             market.info,
             system_program.as_ref(),
             &crate::id(),
             &rent,
-            size_of::<MarketFixed>() as u64,
+            total_size,
             market_seeds,
         )?;
 
-        // Create the quote vault only (no base vault — base is virtual in perps)
+        // Create the quote vault as an ATA owned by the market PDA.
+        // vault = find_program_address([market, spl_token, mint], associated_token_program)
         {
             let mint = quote_mint.as_ref();
             let is_mint_22: bool = *mint.owner == spl_token_2022::id();
@@ -166,74 +183,63 @@ pub(crate) fn process_create_market(
             } else {
                 spl_token::id()
             };
-
-            let (_vault_key, bump) = get_vault_address(market.info.key, mint.key);
-            let seeds: Vec<Vec<u8>> = vec![
-                b"vault".to_vec(),
-                market.info.key.as_ref().to_vec(),
-                mint.key.as_ref().to_vec(),
-                vec![bump],
-            ];
-
-            if is_mint_22 {
-                let mint_data: Ref<'_, &mut [u8]> = mint.data.borrow();
-                let mint_with_extension: PodStateWithExtensions<'_, PodMint> =
-                    PodStateWithExtensions::<PodMint>::unpack(&mint_data).unwrap();
-                let mint_extensions: Vec<ExtensionType> =
-                    mint_with_extension.get_extension_types()?;
-                let required_extensions: Vec<ExtensionType> =
-                    ExtensionType::get_required_init_account_extensions(&mint_extensions);
-                let space: usize =
-                    ExtensionType::try_calculate_account_len::<Account>(&required_extensions)?;
-                create_account(
-                    payer.as_ref(),
-                    quote_vault.as_ref(),
-                    system_program.as_ref(),
+            invoke(
+                &spl_associated_token_account::instruction::create_associated_token_account(
+                    payer.info.key,
+                    market.info.key,
+                    mint.key,
                     &token_program_for_mint,
-                    &rent,
-                    space as u64,
-                    seeds,
-                )?;
-                invoke(
-                    &spl_token_2022::instruction::initialize_account3(
-                        &token_program_for_mint,
-                        quote_vault.as_ref().key,
-                        mint.key,
-                        quote_vault.as_ref().key,
-                    )?,
-                    &[
-                        payer.as_ref().clone(),
-                        quote_vault.as_ref().clone(),
-                        mint.clone(),
-                        token_program_22.as_ref().clone(),
+                ),
+                &[
+                    payer.as_ref().clone(),
+                    quote_vault.as_ref().clone(),
+                    market.info.clone(),
+                    mint.clone(),
+                    system_program.as_ref().clone(),
+                    if is_mint_22 {
+                        token_program_22.as_ref().clone()
+                    } else {
+                        token_program.as_ref().clone()
+                    },
+                    associated_token_program.as_ref().clone(),
+                ],
+            )?;
+        }
+
+        // Initialize the ephemeral vault ATA (owned by the market PDA, for use on the ER)
+        {
+            let (ephemeral_vault_ata_key, ephemeral_vault_bump) =
+                Pubkey::find_program_address(
+                    &[market.info.key.as_ref(), quote_mint.info.key.as_ref()],
+                    ephemeral_spl_token.as_ref().key,
+                );
+            require!(
+                ephemeral_vault_ata_key == *ephemeral_vault_ata.info.key,
+                crate::program::ManifestError::InvalidMarketPubkey,
+                "Ephemeral vault ATA is not at expected PDA address",
+            )?;
+
+            invoke(
+                &Instruction {
+                    program_id: *ephemeral_spl_token.as_ref().key,
+                    accounts: vec![
+                        AccountMeta::new(*ephemeral_vault_ata.info.key, false),
+                        AccountMeta::new(*payer.info.key, true),
+                        AccountMeta::new_readonly(*market.info.key, false),
+                        AccountMeta::new_readonly(*quote_mint.info.key, false),
+                        AccountMeta::new_readonly(*system_program.info.key, false),
                     ],
-                )?;
-            } else {
-                let space: usize = spl_token::state::Account::LEN;
-                create_account(
-                    payer.as_ref(),
-                    quote_vault.as_ref(),
-                    system_program.as_ref(),
-                    &token_program_for_mint,
-                    &rent,
-                    space as u64,
-                    seeds,
-                )?;
-                invoke(
-                    &spl_token::instruction::initialize_account3(
-                        &token_program_for_mint,
-                        quote_vault.as_ref().key,
-                        mint.key,
-                        quote_vault.as_ref().key,
-                    )?,
-                    &[
-                        payer.as_ref().clone(),
-                        quote_vault.as_ref().clone(),
-                        mint.clone(),
-                        token_program.as_ref().clone(),
-                    ],
-                )?;
-            }
+                    // disc=0 (InitializeEphemeralAta), then bump
+                    data: vec![0u8, ephemeral_vault_bump],
+                },
+                &[
+                    ephemeral_vault_ata.as_ref().clone(),
+                    payer.as_ref().clone(),
+                    market.info.clone(),
+                    quote_mint.info.clone(),
+                    system_program.as_ref().clone(),
+                ],
+            )?;
         }
 
         // Setup the empty market
@@ -253,10 +259,24 @@ pub(crate) fn process_create_market(
         empty_market_fixed.set_taker_fee_bps(params.taker_fee_bps);
         empty_market_fixed.set_liquidation_buffer_bps(params.liquidation_buffer_bps);
 
-        assert_eq!(market.info.data_len(), size_of::<MarketFixed>());
+        assert_eq!(
+            market.info.data_len(),
+            size_of::<MarketFixed>() + params.num_blocks as usize * MARKET_BLOCK_SIZE
+        );
 
-        let market_bytes: &mut [u8] = &mut market.info.try_borrow_mut_data()?[..];
-        *get_mut_helper::<MarketFixed>(market_bytes, 0_u32) = empty_market_fixed;
+        {
+            let market_bytes: &mut [u8] = &mut market.info.try_borrow_mut_data()?[..];
+            *get_mut_helper::<MarketFixed>(market_bytes, 0_u32) = empty_market_fixed;
+        }
+
+        // Pre-expand blocks into the free list
+        if params.num_blocks > 0 {
+            let market_data: &mut std::cell::RefMut<&mut [u8]> =
+                &mut market.info.try_borrow_mut_data()?;
+            let mut dynamic_account: crate::state::MarketRefMut =
+                get_mut_dynamic_account(market_data);
+            dynamic_account.market_expand_n(params.num_blocks)?;
+        }
 
         emit_stack(CreateMarketLog {
             market: *market.info.key,

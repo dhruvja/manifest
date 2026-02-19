@@ -43,20 +43,25 @@ impl CrankFundingParams {
     }
 }
 
-/// Read Pyth V2 price from account data.
+/// Read Pyth price from account data.
+/// Supports both Pyth V2 push oracle (240+ bytes, magic 0xa1b2c3d4) and
+/// PriceUpdateV3 pull oracle (~134 bytes, used on MagicBlock ER).
 /// Returns (price: i64, expo: i32, confidence: u64)
 fn read_pyth_price(data: &[u8]) -> Result<(i64, i32, u64), ProgramError> {
-    if data.len() < PYTH_MIN_DATA_LEN {
-        solana_program::msg!("Pyth account data too small: {}", data.len());
-        return Err(ManifestError::InvalidPerpsOperation.into());
+    // Try V2 push oracle first (magic number check)
+    if data.len() >= PYTH_MIN_DATA_LEN {
+        let magic = u32::from_le_bytes(data[0..4].try_into().unwrap());
+        if magic == PYTH_MAGIC {
+            return read_pyth_v2(data);
+        }
     }
 
-    let magic = u32::from_le_bytes(data[0..4].try_into().unwrap());
-    if magic != PYTH_MAGIC {
-        solana_program::msg!("Pyth magic mismatch: expected {:#x}, got {:#x}", PYTH_MAGIC, magic);
-        return Err(ManifestError::InvalidPerpsOperation.into());
-    }
+    // Fall back to PriceUpdateV3 pull oracle
+    read_pyth_v3(data)
+}
 
+/// Parse Pyth V2 push oracle format (240+ bytes).
+fn read_pyth_v2(data: &[u8]) -> Result<(i64, i32, u64), ProgramError> {
     let expo = i32::from_le_bytes(
         data[PYTH_EXPO_OFFSET..PYTH_EXPO_OFFSET + 4]
             .try_into()
@@ -85,6 +90,51 @@ fn read_pyth_price(data: &[u8]) -> Result<(i64, i32, u64), ProgramError> {
 
     if price <= 0 {
         solana_program::msg!("Pyth price not positive: {}", price);
+        return Err(ManifestError::InvalidPerpsOperation.into());
+    }
+
+    Ok((price, expo, conf))
+}
+
+/// Parse PriceUpdateV3 pull oracle format (~134 bytes, MagicBlock ER).
+/// Layout: disc(8) + authority(32) + verification_level(1) + PriceFeedMessage
+///   PriceFeedMessage: feed_id(32) + price(i64) + conf(u64) + expo(i32) + ...
+fn read_pyth_v3(data: &[u8]) -> Result<(i64, i32, u64), ProgramError> {
+    if data.len() < 93 {
+        solana_program::msg!("PriceUpdateV3 account too small: {}", data.len());
+        return Err(ManifestError::InvalidPerpsOperation.into());
+    }
+
+    // verification_level at byte 40: 0x01 (Full) → msg at 41, 0x00 (Partial) → msg at 42
+    let msg_start: usize = match data[40] {
+        0x01 => 41,
+        0x00 => 42,
+        b => {
+            solana_program::msg!("Unknown PriceUpdateV3 VerificationLevel: {}", b);
+            return Err(ManifestError::InvalidPerpsOperation.into());
+        }
+    };
+
+    if data.len() < msg_start + 52 {
+        solana_program::msg!("PriceUpdateV3 truncated at message payload");
+        return Err(ManifestError::InvalidPerpsOperation.into());
+    }
+
+    let price = i64::from_le_bytes(
+        data[msg_start + 32..msg_start + 40].try_into().unwrap(),
+    );
+    let conf = u64::from_le_bytes(
+        data[msg_start + 40..msg_start + 48].try_into().unwrap(),
+    );
+    // PriceUpdateV3 stores expo as positive decimal places (e.g. 8 means price/10^8).
+    // Standard Pyth V2 uses negative exponent (e.g. -8). Negate to normalize.
+    let raw_expo = i32::from_le_bytes(
+        data[msg_start + 48..msg_start + 52].try_into().unwrap(),
+    );
+    let expo = if raw_expo > 0 { -raw_expo } else { raw_expo };
+
+    if price <= 0 {
+        solana_program::msg!("PriceUpdateV3 price not positive: {}", price);
         return Err(ManifestError::InvalidPerpsOperation.into());
     }
 

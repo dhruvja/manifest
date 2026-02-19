@@ -19,6 +19,7 @@ use crate::{
 };
 
 use super::{get_vault_address, ManifestAccountInfo, TokenProgram};
+use spl_associated_token_account;
 
 #[cfg(feature = "certora")]
 use early_panic::early_panic;
@@ -32,6 +33,9 @@ pub(crate) struct CreateMarketContext<'a, 'info> {
     pub system_program: Program<'a, 'info>,
     pub token_program: TokenProgram<'a, 'info>,
     pub token_program_22: TokenProgram<'a, 'info>,
+    pub associated_token_program: Program<'a, 'info>,
+    pub ephemeral_vault_ata: EmptyAccount<'a, 'info>,
+    pub ephemeral_spl_token: Program<'a, 'info>,
 }
 
 impl<'a, 'info> CreateMarketContext<'a, 'info> {
@@ -48,16 +52,26 @@ impl<'a, 'info> CreateMarketContext<'a, 'info> {
         // PDA verification is done in the processor after params are parsed
         // (seeds depend on base_mint_index from params)
 
-        let (expected_quote_vault, _quote_vault_bump) =
+        let (expected_quote_vault, _) =
             get_vault_address(market.info.key, quote_mint.info.key);
         require!(
             expected_quote_vault == *quote_vault.info.key,
             ManifestError::IncorrectAccount,
-            "Incorrect quote vault account",
+            "Incorrect quote vault account (expected ATA of market)",
         )?;
 
         let token_program: TokenProgram = TokenProgram::new(next_account_info(account_iter)?)?;
         let token_program_22: TokenProgram = TokenProgram::new(next_account_info(account_iter)?)?;
+        let associated_token_program: Program = Program::new(
+            next_account_info(account_iter)?,
+            &spl_associated_token_account::id(),
+        )?;
+        let ephemeral_vault_ata: EmptyAccount =
+            EmptyAccount::new(next_account_info(account_iter)?)?;
+        let ephemeral_spl_token: Program = Program::new(
+            next_account_info(account_iter)?,
+            &solana_program::pubkey!("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2"),
+        )?;
 
         Ok(Self {
             payer,
@@ -67,6 +81,9 @@ impl<'a, 'info> CreateMarketContext<'a, 'info> {
             token_program,
             token_program_22,
             system_program,
+            associated_token_program,
+            ephemeral_vault_ata,
+            ephemeral_spl_token,
         })
     }
 }
@@ -80,6 +97,32 @@ pub(crate) struct ClaimSeatContext<'a, 'info> {
 
 impl<'a, 'info> ClaimSeatContext<'a, 'info> {
     #[cfg_attr(all(feature = "certora", not(feature = "certora-test")), early_panic)]
+    pub fn load(accounts: &'a [AccountInfo<'info>]) -> Result<Self, ProgramError> {
+        let account_iter: &mut Iter<AccountInfo<'info>> = &mut accounts.iter();
+
+        let payer: Signer = Signer::new(next_account_info(account_iter)?)?;
+        let market_info: &AccountInfo = next_account_info(account_iter)?;
+        let market: ManifestAccountInfo<MarketFixed> =
+            ManifestAccountInfo::<MarketFixed>::new(market_info)
+                .or_else(|_| ManifestAccountInfo::<MarketFixed>::new_delegated(market_info))?;
+        let _system_program: Program =
+            Program::new(next_account_info(account_iter)?, &system_program::id())?;
+        Ok(Self {
+            payer,
+            market,
+            _system_program,
+        })
+    }
+}
+
+/// ReleaseSeat account infos
+pub(crate) struct ReleaseSeatContext<'a, 'info> {
+    pub payer: Signer<'a, 'info>,
+    pub market: ManifestAccountInfo<'a, 'info, MarketFixed>,
+    pub _system_program: Program<'a, 'info>,
+}
+
+impl<'a, 'info> ReleaseSeatContext<'a, 'info> {
     pub fn load(accounts: &'a [AccountInfo<'info>]) -> Result<Self, ProgramError> {
         let account_iter: &mut Iter<AccountInfo<'info>> = &mut accounts.iter();
 
@@ -152,42 +195,33 @@ impl<'a, 'info> DepositContext<'a, 'info> {
         let (expected_vault_address, _) = get_vault_address(market.info.key, &quote_mint);
 
         let token_account_info: &AccountInfo<'info> = next_account_info(account_iter)?;
-        let is_ephemeral: bool =
-            token_account_info.data_len() == super::token_checkers::EPHEMERAL_ATA_SIZE;
 
         // Only quote (USDC) deposits are allowed — verify the trader token is for quote mint
-        let mint_offset: usize = if is_ephemeral { 32 } else { 0 };
         {
             let data = token_account_info.try_borrow_data()?;
             require!(
-                &data[mint_offset..mint_offset + 32] == quote_mint.as_ref(),
+                &data[0..32] == quote_mint.as_ref(),
                 ManifestError::InvalidWithdrawAccounts,
                 "Only quote mint deposits allowed",
             )?;
         }
 
-        trace!("trader token account {:?}", token_account_info.key);
+        solana_program::msg!("trader token account {:?}", token_account_info.key);
+        solana_program::msg!("payer key {:?}", payer.key);
         let trader_token: TokenAccountInfo =
             TokenAccountInfo::new_with_owner(token_account_info, &quote_mint, payer.key)?;
 
         let vault_info: &AccountInfo<'info> = next_account_info(account_iter)?;
-        let vault: TokenAccountInfo = if is_ephemeral {
-            TokenAccountInfo::new(vault_info, &quote_mint)?
-        } else {
-            TokenAccountInfo::new_with_owner_and_key(
-                vault_info,
-                &quote_mint,
-                &expected_vault_address,
-                &expected_vault_address,
-            )?
-        };
+        let vault: TokenAccountInfo = TokenAccountInfo::new_with_owner_and_key(
+            vault_info,
+            &quote_mint,
+            &market.info.key,
+            &expected_vault_address,
+        )?;
 
         let token_program: TokenProgram = TokenProgram::new(next_account_info(account_iter)?)?;
-        let mint: Option<MintAccountInfo> = if is_ephemeral {
-            None
-        } else {
-            Some(MintAccountInfo::new(next_account_info(account_iter)?)?)
-        };
+        let mint: Option<MintAccountInfo> =
+            Some(MintAccountInfo::new(next_account_info(account_iter)?)?);
 
         drop(market_fixed);
         Ok(Self {
@@ -228,15 +262,12 @@ impl<'a, 'info> WithdrawContext<'a, 'info> {
         let (expected_vault_address, _) = get_vault_address(market.info.key, &quote_mint);
 
         let token_account_info: &AccountInfo<'info> = next_account_info(account_iter)?;
-        let is_ephemeral: bool =
-            token_account_info.data_len() == super::token_checkers::EPHEMERAL_ATA_SIZE;
 
         // Only quote (USDC) withdrawals are allowed
-        let mint_offset: usize = if is_ephemeral { 32 } else { 0 };
         {
             let data = token_account_info.try_borrow_data()?;
             require!(
-                &data[mint_offset..mint_offset + 32] == quote_mint.as_ref(),
+                &data[0..32] == quote_mint.as_ref(),
                 ManifestError::InvalidWithdrawAccounts,
                 "Only quote mint withdrawals allowed",
             )?;
@@ -246,23 +277,16 @@ impl<'a, 'info> WithdrawContext<'a, 'info> {
             TokenAccountInfo::new_with_owner(token_account_info, &quote_mint, payer.key)?;
 
         let vault_info: &AccountInfo<'info> = next_account_info(account_iter)?;
-        let vault: TokenAccountInfo = if is_ephemeral {
-            TokenAccountInfo::new(vault_info, &quote_mint)?
-        } else {
-            TokenAccountInfo::new_with_owner_and_key(
-                vault_info,
-                &quote_mint,
-                &expected_vault_address,
-                &expected_vault_address,
-            )?
-        };
+        let vault: TokenAccountInfo = TokenAccountInfo::new_with_owner_and_key(
+            vault_info,
+            &quote_mint,
+            &expected_vault_address,
+            &expected_vault_address,
+        )?;
 
         let token_program: TokenProgram = TokenProgram::new(next_account_info(account_iter)?)?;
-        let mint: Option<MintAccountInfo> = if is_ephemeral {
-            None
-        } else {
-            Some(MintAccountInfo::new(next_account_info(account_iter)?)?)
-        };
+        let mint: Option<MintAccountInfo> =
+            Some(MintAccountInfo::new(next_account_info(account_iter)?)?);
 
         drop(market_fixed);
         Ok(Self {
@@ -323,23 +347,11 @@ impl<'a, 'info> SwapContext<'a, 'info> {
         let market_fixed: Ref<MarketFixed> = market.get_fixed()?;
         let quote_mint_key: Pubkey = *market_fixed.get_quote_mint();
 
-        // Derive quote vault on-the-fly
-        let (quote_vault_address, _) = get_vault_address(market.info.key, &quote_mint_key);
-
         let trader_quote: TokenAccountInfo =
             TokenAccountInfo::new(next_account_info(account_iter)?, &quote_mint_key)?;
 
         let quote_vault_info: &AccountInfo<'info> = next_account_info(account_iter)?;
-        let quote_vault: TokenAccountInfo = if trader_quote.is_ephemeral() {
-            TokenAccountInfo::new(quote_vault_info, &quote_mint_key)?
-        } else {
-            TokenAccountInfo::new_with_owner_and_key(
-                quote_vault_info,
-                &quote_mint_key,
-                &quote_vault_address,
-                &quote_vault_address,
-            )?
-        };
+        let quote_vault: TokenAccountInfo = TokenAccountInfo::new(quote_vault_info, &quote_mint_key)?;
         drop(market_fixed);
 
         let token_program_quote: TokenProgram = TokenProgram::new(next_account_info(account_iter)?)?;
@@ -347,9 +359,7 @@ impl<'a, 'info> SwapContext<'a, 'info> {
         let global_trade_accounts_opts: [Option<GlobalTradeAccounts<'a, 'info>>; 2] =
             [None, None];
 
-        let ephemeral_token_id = super::token_checkers::ephemeral_spl_token::id();
-
-        let mut current_account_info_or: Result<&AccountInfo<'info>, ProgramError> =
+        let current_account_info_or: Result<&AccountInfo<'info>, ProgramError> =
             next_account_info(account_iter);
 
         // Possibly includes quote mint if the token program is token22.
