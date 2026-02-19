@@ -17,3 +17,4 @@ spl-token         = { workspace = true }
 spl-associated-token-account = { version = "7", features = ["no-entrypoint"] }
 borsh             = { workspace = true }
 anyhow            = { workspace = true }
+bytemuck          = { workspace = true }

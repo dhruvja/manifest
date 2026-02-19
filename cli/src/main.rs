@@ -14,13 +14,14 @@ use manifest::{
         batch_update_instruction,
         claim_seat_instruction::claim_seat_instruction,
         crank_funding_instruction, create_market_instructions,
-        deposit_instruction, deposit_instruction_with_vault, expand_market_instruction, expand_market_n_instruction,
-        liquidate_instruction, release_seat_instruction,
+        deposit_instruction, deposit_instruction_with_vault, expand_market_instruction,
+        liquidate_instruction,
         swap_instruction::swap_instruction_with_vaults,
         withdraw_instruction, withdraw_instruction_with_vault,
         ManifestInstruction,
     },
-    state::OrderType,
+    quantities::WrapperU64,
+    state::{market::MarketFixed, OrderType, MARKET_FIXED_SIZE},
     validation::{get_market_address, get_vault_address},
 };
 use solana_client::rpc_client::RpcClient;
@@ -351,6 +352,16 @@ enum Commands {
         market: String,
     },
 
+    /// Display the current user's position, margin, equity, leverage, liquidation price, and more
+    Position {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Trader address (defaults to payer)
+        #[arg(long)]
+        trader: Option<String>,
+    },
+
     /// Run the full demo setup: mint → market → expand → seat → deposit → delegate
     ///   → maker ASK → taker BID → open long → close long → PnL
     Setup {
@@ -553,6 +564,19 @@ fn usd_to_order_price(price_usd: f64, quote_decimals: u8, base_decimals: u8) -> 
         e += 1;
     }
     (m.round() as u32, e as i8)
+}
+
+const EPHEMERAL_SPL_TOKEN_ID: &str = "SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2";
+
+fn ephemeral_spl_token_id() -> Pubkey {
+    Pubkey::from_str(EPHEMERAL_SPL_TOKEN_ID).unwrap()
+}
+
+fn get_ephemeral_ata(owner: &Pubkey, mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[owner.as_ref(), mint.as_ref()],
+        &ephemeral_spl_token_id(),
+    )
 }
 
 fn delegate_market_ix(payer: &Pubkey, market: &Pubkey) -> Instruction {
@@ -978,6 +1002,199 @@ fn cmd_market_info(client: &RpcClient, market: &Pubkey) -> Result<()> {
     Ok(())
 }
 
+fn cmd_position(client: &RpcClient, market_key: &Pubkey, trader: &Pubkey) -> Result<()> {
+    let account = client.get_account(market_key)?;
+    let data = &account.data;
+    if data.len() < MARKET_FIXED_SIZE {
+        return Err(anyhow!("Account data too small for MarketFixed"));
+    }
+
+    let fixed: &MarketFixed = bytemuck::from_bytes(&data[..MARKET_FIXED_SIZE]);
+    let dynamic = &data[MARKET_FIXED_SIZE..];
+    let market = manifest::state::MarketValue {
+        fixed: *fixed,
+        dynamic: dynamic.to_vec(),
+    };
+
+    // ── Market parameters ───────────────────────────────────────────────
+    let oracle_mantissa = fixed.get_oracle_price_mantissa();
+    let oracle_expo = fixed.get_oracle_price_expo();
+    let oracle_price = oracle_mantissa as f64 * 10f64.powi(oracle_expo);
+    let initial_margin_bps = fixed.get_initial_margin_bps();
+    let maintenance_margin_bps = fixed.get_maintenance_margin_bps();
+    let max_leverage = 10_000.0 / initial_margin_bps as f64;
+    let maint_leverage = 10_000.0 / maintenance_margin_bps as f64;
+    let taker_fee_bps = fixed.get_taker_fee_bps();
+    let insurance_fund = fixed.get_insurance_fund_balance();
+    let liq_buffer_bps = fixed.get_liquidation_buffer_bps();
+    let cumulative_funding = fixed.get_cumulative_funding();
+
+    let base_decimals = fixed.get_base_mint_decimals() as u32;
+    let quote_decimals = fixed.get_quote_mint_decimals() as u32;
+    let base_factor = 10f64.powi(base_decimals as i32);
+    let quote_factor = 10f64.powi(quote_decimals as i32);
+
+    // ── Trader position ─────────────────────────────────────────────────
+    let (position_size, cost_basis) = market.get_trader_position(trader);
+    let (_, quote_balance) = market.get_trader_balance(trader);
+    let margin_atoms = quote_balance.as_u64();
+
+    let pos_base = position_size as f64 / base_factor;
+    let is_long = position_size > 0;
+    let is_short = position_size < 0;
+    let direction = if is_long {
+        "LONG"
+    } else if is_short {
+        "SHORT"
+    } else {
+        "FLAT"
+    };
+
+    let abs_pos = position_size.unsigned_abs() as f64 / base_factor;
+    let notional = abs_pos * oracle_price;
+    let margin = margin_atoms as f64 / quote_factor;
+    let cost_usd = cost_basis as f64 / quote_factor;
+    let entry_price = if position_size != 0 {
+        cost_usd / abs_pos
+    } else {
+        0.0
+    };
+
+    // PnL: LONG = value - cost, SHORT = cost - value
+    let current_value = abs_pos * oracle_price;
+    let unrealized_pnl = if is_long {
+        current_value - cost_usd
+    } else if is_short {
+        cost_usd - current_value
+    } else {
+        0.0
+    };
+
+    let equity = margin + unrealized_pnl;
+    let leverage = if equity > 0.0 && position_size != 0 {
+        notional / equity
+    } else {
+        0.0
+    };
+
+    // ── Liquidation price ───────────────────────────────────────────────
+    // Liquidation when: equity <= notional * maintenance_margin_bps / 10000
+    // equity = margin + pnl
+    // LONG:  margin + (pos * liq_price - cost) = pos * liq_price * maint_bps / 10000
+    //   margin - cost = pos * liq_price * (maint_bps/10000 - 1)
+    //   liq_price = (margin - cost) / (pos * (maint_bps/10000 - 1))
+    //   But since maint_bps < 10000, the denominator is negative. Rearranging:
+    //   liq_price = (cost - margin) / (pos * (1 - maint_bps/10000))
+    // SHORT: margin + (cost - pos * liq_price) = pos * liq_price * maint_bps / 10000
+    //   margin + cost = pos * liq_price * (1 + maint_bps/10000)
+    //   liq_price = (margin + cost) / (pos * (1 + maint_bps/10000))
+    let maint_ratio = maintenance_margin_bps as f64 / 10_000.0;
+    let liq_price = if is_long {
+        (cost_usd - margin) / (abs_pos * (1.0 - maint_ratio))
+    } else if is_short {
+        (margin + cost_usd) / (abs_pos * (1.0 + maint_ratio))
+    } else {
+        0.0
+    };
+    let distance_to_liq = if position_size != 0 {
+        ((oracle_price - liq_price) / oracle_price * 100.0).abs()
+    } else {
+        0.0
+    };
+
+    // ── Max position at current equity ──────────────────────────────────
+    let max_notional = equity * max_leverage;
+    let max_position_base = if oracle_price > 0.0 {
+        max_notional / oracle_price
+    } else {
+        0.0
+    };
+
+    // ── Pending funding ─────────────────────────────────────────────────
+    // The on-chain settle hasn't run, so compute what the next settle would do
+    let last_cumul = {
+        // Read last_cumulative_funding from the seat directly
+        let (base_bal, _) = market.get_trader_balance(trader);
+        base_bal.as_u64() as i64
+    };
+    let funding_delta = cumulative_funding - last_cumul;
+    let pending_funding = if position_size != 0 && funding_delta != 0 {
+        (position_size as i128 * funding_delta as i128 / 1_000_000_000i128) as f64
+            / quote_factor
+    } else {
+        0.0
+    };
+
+    // ── Display ─────────────────────────────────────────────────────────
+    println!("═══════════════════════════════════════════════════════");
+    println!("  Market    : {market_key}");
+    println!("  Trader    : {trader}");
+    println!("═══════════════════════════════════════════════════════");
+    println!();
+    println!("── Oracle ─────────────────────────────────────────────");
+    println!("  Price           : ${oracle_price:.4}");
+    println!("  Mantissa        : {oracle_mantissa}");
+    println!("  Exponent        : {oracle_expo}");
+    println!();
+    println!("── Position ───────────────────────────────────────────");
+    println!("  Direction       : {direction}");
+    println!(
+        "  Size            : {abs_pos:.6} base ({position_size} atoms)"
+    );
+    println!("  Entry Price     : ${entry_price:.4}");
+    println!("  Cost Basis      : ${cost_usd:.4}");
+    println!("  Notional        : ${notional:.4}");
+    println!();
+    println!("── Margin & Equity ────────────────────────────────────");
+    println!("  Margin (deposit): ${margin:.4} ({margin_atoms} atoms)");
+    println!("  Unrealized PnL  : ${unrealized_pnl:+.4}");
+    println!(
+        "  Pending Funding : ${pending_funding:+.4}{}",
+        if pending_funding < 0.0 {
+            " (will reduce equity)"
+        } else if pending_funding > 0.0 {
+            " (will increase equity)"
+        } else {
+            ""
+        }
+    );
+    println!("  Equity          : ${equity:.4}");
+    println!();
+    println!("── Leverage & Liquidation ─────────────────────────────");
+    println!("  Effective Leverage : {leverage:.2}x");
+    println!(
+        "  Max Leverage       : {max_leverage:.1}x (initial margin {initial_margin_bps} bps = {}%)",
+        initial_margin_bps as f64 / 100.0
+    );
+    println!(
+        "  Maint. Leverage    : {maint_leverage:.1}x (maintenance {maintenance_margin_bps} bps = {}%)",
+        maintenance_margin_bps as f64 / 100.0
+    );
+    if position_size != 0 {
+        println!("  Liquidation Price  : ${liq_price:.4} ({distance_to_liq:.2}% away)");
+    } else {
+        println!("  Liquidation Price  : N/A (no position)");
+    }
+    println!();
+    println!("── Max Position (at current equity) ───────────────────");
+    println!("  Max Notional     : ${max_notional:.2}");
+    println!("  Max Size         : {max_position_base:.6} base");
+    println!();
+    println!("── Market Parameters ──────────────────────────────────");
+    println!("  Taker Fee        : {} bps ({:.3}%)", taker_fee_bps, taker_fee_bps as f64 / 100.0);
+    println!(
+        "  Liq. Buffer      : {liq_buffer_bps} bps ({:.1}%)",
+        liq_buffer_bps as f64 / 100.0
+    );
+    println!("  Insurance Fund   : ${:.4} ({insurance_fund} atoms)", insurance_fund as f64 / quote_factor);
+    println!(
+        "  Cumul. Funding   : {cumulative_funding} (scaled by 1e9)"
+    );
+    println!();
+
+    Ok(())
+}
+
 fn cmd_setup(
     devnet: &RpcClient,
     er: &RpcClient,
@@ -1320,6 +1537,12 @@ fn main() -> Result<()> {
         Commands::MarketInfo { market } => {
             let market = parse_pubkey(&market)?;
             cmd_market_info(&client, &market)?;
+        }
+
+        Commands::Position { market, trader } => {
+            let market = parse_pubkey(&market)?;
+            let trader = trader.as_deref().map(parse_pubkey).transpose()?.unwrap_or(payer.pubkey());
+            cmd_position(&client, &market, &trader)?;
         }
 
         Commands::Setup {

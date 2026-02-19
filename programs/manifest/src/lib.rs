@@ -93,7 +93,7 @@ security_txt! {
 // transaction limit before an attacker is able to clear a substantial number of
 // seats in one transaction.
 
-declare_id!("5QEqei6GyEu44vkh12gJNndqXmbmLy23VcTHWnRjQgG5");
+declare_id!("3TN9efyWfeG3s1ZDZdbYtLJwMdWRRtM2xPGsM2T9QrUa");
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);

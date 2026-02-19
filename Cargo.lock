@@ -1128,6 +1128,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.4",
+ "bytemuck",
  "clap",
  "manifest-dex",
  "solana-client",
