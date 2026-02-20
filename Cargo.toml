@@ -8,6 +8,8 @@ members = [
   "programs/wrapper",
   "programs/ui-wrapper",
   "cli",
+  "sdk",
+  "perp-mm",
 ]
 
 [workspace.dependencies]

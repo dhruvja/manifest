@@ -1,0 +1,20 @@
+[package]
+name = "manifest-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK for the Manifest Perps DEX"
+
+[lib]
+name = "manifest_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+manifest-dex      = { path = "../programs/manifest", features = [] }
+hypertree         = { path = "../lib" }
+solana-client     = "=2.2"
+solana-sdk        = { workspace = true }
+solana-program    = { workspace = true }
+spl-token         = { workspace = true }
+spl-associated-token-account = { version = "7", features = ["no-entrypoint"] }
+bytemuck          = { workspace = true }
+anyhow            = { workspace = true }

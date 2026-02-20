@@ -1,0 +1,18 @@
+[package]
+name = "perp-mm"
+version = "0.1.0"
+edition = "2021"
+description = "Market maker bot for the Manifest Perps DEX"
+
+[[bin]]
+name = "perp-mm"
+path = "src/main.rs"
+
+[dependencies]
+manifest-sdk     = { path = "../sdk" }
+manifest-dex     = { path = "../programs/manifest", features = [] }
+solana-client    = "=2.2"
+solana-sdk       = { workspace = true }
+solana-program   = { workspace = true }
+anyhow           = { workspace = true }
+clap             = { version = "4", features = ["derive"] }

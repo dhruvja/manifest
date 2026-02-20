@@ -3013,6 +3013,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "manifest-sdk"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "hypertree",
+ "manifest-dex",
+ "solana-client",
+ "solana-program",
+ "solana-sdk",
+ "spl-associated-token-account",
+ "spl-token 8.0.0",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3520,6 +3535,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd23b938276f14057220b707937bcb42fa76dda7560e57a2da30cb52d557937"
 dependencies = [
  "num",
+]
+
+[[package]]
+name = "perp-mm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "manifest-dex",
+ "manifest-sdk",
+ "solana-client",
+ "solana-program",
+ "solana-sdk",
 ]
 
 [[package]]
