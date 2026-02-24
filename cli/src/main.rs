@@ -6,21 +6,23 @@
 //! Commands: create-mint  mint-to  create-market  expand  claim-seat
 //!           deposit  withdraw  place-order  cancel-order  delegate
 //!           crank-funding  liquidate  fetch-price  market-info  setup
+//!           create-escrow  delegate-escrow  fund-escrow
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
+use manifest::deps::hypertree::HyperTreeValueIteratorTrait;
 use manifest::{
     program::{
         batch_update::{CancelOrderParams, PlaceOrderParams},
         batch_update_instruction,
         claim_seat_instruction::claim_seat_instruction,
         crank_funding_instruction, create_market_instructions,
-        deposit_instruction, deposit_instruction_with_vault, expand_market_instruction, expand_market_n_instruction,
+        deposit_instruction, deposit_instruction_with_vault, expand_market_n_instruction,
         liquidate_instruction, release_seat_instruction, withdraw_instruction, withdraw_instruction_with_vault,
         swap_instruction::swap_instruction_with_vaults,
         ManifestInstruction,
     },
-    quantities::WrapperU64,
-    state::{market::MarketFixed, OrderType, MARKET_FIXED_SIZE},
+    quantities::{BaseAtoms, WrapperU64},
+    state::{market::MarketFixed, OrderType, RestingOrder, MARKET_FIXED_SIZE},
     validation::{get_market_address, get_vault_address},
 };
 use solana_client::{rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig};
@@ -191,7 +193,7 @@ enum Commands {
         num_blocks: u32,
     },
 
-    /// Expand a market's free block capacity
+    /// Expand a market's free block capacity (uses lamport escrow in ER)
     Expand {
         /// Market PDA address
         #[arg(long)]
@@ -199,6 +201,48 @@ enum Commands {
         /// Number of blocks to add
         #[arg(long, default_value = "10")]
         blocks: u32,
+        /// ER validator pubkey for escrow PDA derivation
+        #[arg(long)]
+        escrow_validator: String,
+        /// Escrow slot for PDA derivation
+        #[arg(long, default_value = "0")]
+        escrow_slot: u64,
+    },
+
+    /// Create a lamport escrow PDA in ephemeral-rollups-spl and fund it
+    CreateEscrow {
+        /// ER validator pubkey
+        #[arg(long)]
+        validator: String,
+        /// Escrow slot
+        #[arg(long, default_value = "0")]
+        slot: u64,
+        /// Lamports to fund the escrow with
+        #[arg(long)]
+        lamports: u64,
+    },
+
+    /// Delegate a lamport escrow PDA to the ER
+    DelegateEscrow {
+        /// ER validator pubkey
+        #[arg(long)]
+        validator: String,
+        /// Escrow slot
+        #[arg(long, default_value = "0")]
+        slot: u64,
+    },
+
+    /// Fund an existing lamport escrow PDA with more SOL
+    FundEscrow {
+        /// ER validator pubkey
+        #[arg(long)]
+        validator: String,
+        /// Escrow slot
+        #[arg(long, default_value = "0")]
+        slot: u64,
+        /// Lamports to transfer
+        #[arg(long)]
+        lamports: u64,
     },
 
     /// Claim a trading seat on a market
@@ -368,6 +412,13 @@ enum Commands {
         market: String,
     },
 
+    /// List all resting orders on the order book (bids and asks)
+    Orderbook {
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+    },
+
     /// Display the current user's position, margin, equity, leverage, liquidation price, and more
     Position {
         /// Market PDA address
@@ -378,21 +429,21 @@ enum Commands {
         trader: Option<String>,
     },
 
-    /// Run the full demo setup: mint → market → expand → seat → deposit → delegate
-    ///   → maker ASK → taker BID → open long → close long → PnL
+    /// Onboard a user to an existing market: mint → ephemeral-init-ata →
+    /// ephemeral-deposit-spl → ephemeral-delegate-ata → claim-seat → ephemeral-manifest-deposit
     Setup {
-        /// Base asset index
-        #[arg(long, default_value = "0")]
-        base_mint_index: u8,
-        /// Initial margin bps
-        #[arg(long, default_value = "1000")]
-        initial_margin_bps: u64,
-        /// Maintenance margin bps
-        #[arg(long, default_value = "500")]
-        maintenance_margin_bps: u64,
-        /// Taker fee bps
-        #[arg(long, default_value = "5")]
-        taker_fee_bps: u64,
+        /// Market PDA address
+        #[arg(long)]
+        market: String,
+        /// Quote mint address (e.g. USDC)
+        #[arg(long)]
+        quote_mint: String,
+        /// Amount of quote tokens to deposit (in atoms)
+        #[arg(long)]
+        amount: u64,
+        /// Mint authority keypair path (for minting tokens to the user)
+        #[arg(long, default_value = "~/.config/solana/mint-authority.json")]
+        mint_authority: String,
     },
 
     /// Read or write the persistent CLI config (~/.config/manifest-cli/config)
@@ -436,7 +487,7 @@ enum Commands {
         recipient: Option<String>,
     },
 
-    /// Delegate the payer's ephemeral ATA to the MagicBlock ER.
+    /// Delegate the payer'e ephemeral ATA to the MagicBlock ER.
     EphemeralDelegateAta {
         /// Quote mint address
         #[arg(long)]
@@ -959,8 +1010,23 @@ fn cmd_release_seat(client: &RpcClient, payer: &Keypair, market: &Pubkey) -> Res
     Ok(())
 }
 
-fn cmd_expand(client: &RpcClient, payer: &Keypair, market: &Pubkey, blocks: u32) -> Result<()> {
+fn cmd_expand(
+    client: &RpcClient,
+    payer: &Keypair,
+    market: &Pubkey,
+    blocks: u32,
+    validator: &Pubkey,
+    escrow_slot: u64,
+) -> Result<()> {
+    let er_spl_program = Pubkey::from_str(EPHEMERAL_ROLLUPS_SPL_ID)?;
+    let (escrow_pda, _) =
+        manifest::program::expand_market_instruction::get_escrow_address(
+            &payer.pubkey(),
+            validator,
+            escrow_slot,
+        );
     println!("Expanding market {market} by {blocks} block(s)…");
+    println!("Escrow PDA  : {escrow_pda}");
     // Solana realloc limit is 10 KB per instruction → max ~125 blocks (80 bytes each).
     // Use chunks of 100 blocks per tx to stay safe.
     const CHUNK: u32 = 100;
@@ -969,14 +1035,153 @@ fn cmd_expand(client: &RpcClient, payer: &Keypair, market: &Pubkey, blocks: u32)
     let mut batch = 1u32;
     while remaining > 0 {
         let n = remaining.min(CHUNK);
-        // Request enough free blocks so the program allocates exactly `n` more
         allocated += n;
-        let ix = expand_market_n_instruction(market, &payer.pubkey(), allocated);
+        let ix = expand_market_n_instruction(
+            market,
+            &payer.pubkey(),
+            &escrow_pda,
+            &er_spl_program,
+            allocated,
+            validator,
+            escrow_slot,
+        );
         let sig = send(client, &[ix], &[payer])?;
         println!("  batch {batch}: +{n} blocks (total {allocated})  sig={sig}");
         remaining -= n;
         batch += 1;
     }
+    Ok(())
+}
+
+// ─── ephemeral-rollups-spl lamport escrow helpers ───────────────────────────
+
+const EPHEMERAL_ROLLUPS_SPL_ID: &str = "DL2q6XaUpXsPsYrDpbieiXG6UisaUpzMSZCTkSvzn2Am";
+
+fn cmd_create_escrow(
+    client: &RpcClient,
+    payer: &Keypair,
+    validator: &Pubkey,
+    slot: u64,
+    lamports: u64,
+) -> Result<()> {
+    let er_spl = parse_pubkey(EPHEMERAL_ROLLUPS_SPL_ID)?;
+    let (escrow_pda, _) = manifest::program::expand_market_instruction::get_escrow_address(
+        &payer.pubkey(),
+        validator,
+        slot,
+    );
+    println!("Creating lamport escrow…");
+    println!("  Authority : {}", payer.pubkey());
+    println!("  Validator : {validator}");
+    println!("  Slot      : {slot}");
+    println!("  Escrow PDA: {escrow_pda}");
+    println!("  Lamports  : {lamports}");
+
+    // Build create instruction
+    // Discriminant: [0x1A, 0x92, 0xB7, 0x8B, 0x57, 0xAD, 0x99, 0x02]
+    // Args (Borsh): authority: Pubkey, validator: Pubkey, slot: u64
+    let mut create_data = Vec::with_capacity(8 + 32 + 32 + 8);
+    create_data.extend_from_slice(&[0x1A, 0x92, 0xB7, 0x8B, 0x57, 0xAD, 0x99, 0x02]);
+    create_data.extend_from_slice(&payer.pubkey().to_bytes()); // authority
+    create_data.extend_from_slice(&validator.to_bytes());
+    create_data.extend_from_slice(&slot.to_le_bytes());
+
+    let create_ix = Instruction::new_with_bytes(
+        er_spl,
+        &create_data,
+        vec![
+            AccountMeta::new(payer.pubkey(), true),  // authority (signer, writable)
+            AccountMeta::new(escrow_pda, false),     // escrow PDA
+            AccountMeta::new_readonly(system_program::id(), false),
+        ],
+    );
+
+    // Fund escrow with SOL transfer
+    let fund_ix = system_instruction::transfer(&payer.pubkey(), &escrow_pda, lamports);
+
+    let sig = send(client, &[create_ix, fund_ix], &[payer])?;
+    println!("  Signature : {sig}");
+    Ok(())
+}
+
+fn cmd_delegate_escrow(
+    client: &RpcClient,
+    payer: &Keypair,
+    validator: &Pubkey,
+    slot: u64,
+) -> Result<()> {
+    let er_spl = parse_pubkey(EPHEMERAL_ROLLUPS_SPL_ID)?;
+    let delegation_program = parse_pubkey(DELEGATION_PROGRAM_ID)?;
+    let (escrow_pda, _) = manifest::program::expand_market_instruction::get_escrow_address(
+        &payer.pubkey(),
+        validator,
+        slot,
+    );
+    println!("Delegating lamport escrow {escrow_pda} to ER…");
+
+    // Build delegate instruction
+    // Discriminant: [0x98, 0xE4, 0x41, 0xD1, 0x81, 0xB6, 0xC9, 0x3B]
+    // Args (Borsh): validator: Pubkey, slot: u64
+    let mut delegate_data = Vec::with_capacity(8 + 32 + 8);
+    delegate_data.extend_from_slice(&[0x98, 0xE4, 0x41, 0xD1, 0x81, 0xB6, 0xC9, 0x3B]);
+    delegate_data.extend_from_slice(&validator.to_bytes());
+    delegate_data.extend_from_slice(&slot.to_le_bytes());
+
+    // Accounts per source: [payer, authority, escrow_pda, buffer, record, metadata,
+    //   delegation_program, owner_program(er_spl), system_program]
+    // buffer PDA: seeds=[b"buffer", escrow_pda] derived from owner_program (er_spl)
+    // record PDA: seeds=[b"delegation", escrow_pda] derived from delegation_program
+    // metadata PDA: seeds=[b"delegation-metadata", escrow_pda] derived from delegation_program
+    let delegation_buffer_pda = Pubkey::find_program_address(
+        &[b"buffer", escrow_pda.as_ref()],
+        &er_spl,
+    ).0;
+    let delegation_record_pda = Pubkey::find_program_address(
+        &[b"delegation", escrow_pda.as_ref()],
+        &delegation_program,
+    ).0;
+    let delegation_metadata_pda = Pubkey::find_program_address(
+        &[b"delegation-metadata", escrow_pda.as_ref()],
+        &delegation_program,
+    ).0;
+
+    let delegate_ix = Instruction::new_with_bytes(
+        er_spl,
+        &delegate_data,
+        vec![
+            AccountMeta::new(payer.pubkey(), true),                   // payer (writable, signer)
+            AccountMeta::new_readonly(payer.pubkey(), true),          // authority (signer)
+            AccountMeta::new(escrow_pda, false),                      // escrow PDA
+            AccountMeta::new(delegation_buffer_pda, false),           // buffer PDA
+            AccountMeta::new(delegation_record_pda, false),           // delegation record
+            AccountMeta::new(delegation_metadata_pda, false),         // delegation metadata
+            AccountMeta::new_readonly(delegation_program, false),     // delegation program
+            AccountMeta::new_readonly(er_spl, false),                 // owner program
+            AccountMeta::new_readonly(system_program::id(), false),   // system program
+        ],
+    );
+
+    let sig = send(client, &[delegate_ix], &[payer])?;
+    println!("  Signature : {sig}");
+    Ok(())
+}
+
+fn cmd_fund_escrow(
+    client: &RpcClient,
+    payer: &Keypair,
+    validator: &Pubkey,
+    slot: u64,
+    lamports: u64,
+) -> Result<()> {
+    let (escrow_pda, _) = manifest::program::expand_market_instruction::get_escrow_address(
+        &payer.pubkey(),
+        validator,
+        slot,
+    );
+    println!("Funding escrow {escrow_pda} with {lamports} lamports…");
+    let ix = system_instruction::transfer(&payer.pubkey(), &escrow_pda, lamports);
+    let sig = send(client, &[ix], &[payer])?;
+    println!("  Signature : {sig}");
     Ok(())
 }
 
@@ -1142,8 +1347,8 @@ fn cmd_swap(
     println!("  in_atoms     : {in_atoms}");
     println!("  min_out_atoms: {min_out_atoms}");
 
-    let (trader_ata, _) = get_ephemeral_ata(&payer.pubkey(), quote_mint);
-    let (vault_ata, _) = get_ephemeral_ata(market, quote_mint);
+    let trader_ata = get_associated_token_address(&payer.pubkey(), quote_mint);
+    let vault_ata = get_associated_token_address(market, quote_mint);
     println!("  Trader ATA   : {trader_ata}");
     println!("  Vault ATA    : {vault_ata}");
 
@@ -1161,7 +1366,7 @@ fn cmd_swap(
         is_base_in,
         true, // is_exact_in
         Pubkey::default(),   // token_program_base (unused)
-        ephemeral_spl_token_id(),
+        spl_token::id(),
         false,
     );
     let sig = send(client, &[ix], &[payer])?;
@@ -1376,6 +1581,157 @@ fn cmd_market_info(client: &RpcClient, market: &Pubkey) -> Result<()> {
     Ok(())
 }
 
+fn cmd_orderbook(client: &RpcClient, market_key: &Pubkey) -> Result<()> {
+    let account = client.get_account(market_key)?;
+    let data = &account.data;
+    if data.len() < MARKET_FIXED_SIZE {
+        return Err(anyhow!("Account data too small for MarketFixed"));
+    }
+    let fixed: &MarketFixed = bytemuck::from_bytes(&data[..MARKET_FIXED_SIZE]);
+    let dynamic = &data[MARKET_FIXED_SIZE..];
+    let market = manifest::state::MarketValue {
+        fixed: *fixed,
+        dynamic: dynamic.to_vec(),
+    };
+
+    let base_decimals = fixed.get_base_mint_decimals() as u32;
+    let quote_decimals = fixed.get_quote_mint_decimals() as u32;
+    let base_factor = 10f64.powi(base_decimals as i32);
+
+    // Helper: price per 1 base unit in USD
+    let price_usd = |order: &RestingOrder| -> f64 {
+        let one_base_unit = BaseAtoms::new(10u64.pow(base_decimals));
+        match order.get_price().checked_quote_for_base(one_base_unit, false) {
+            Ok(quote) => quote.as_u64() as f64 / 10f64.powi(quote_decimals as i32),
+            Err(_) => 0.0,
+        }
+    };
+
+    // Collect bids: (base_atoms, price_usd, seq, trader_index)
+    let mut bids: Vec<(u64, f64, u64, u32)> = Vec::new();
+    for (_, order) in market.get_bids().iter::<RestingOrder>() {
+        bids.push((
+            order.get_num_base_atoms().as_u64(),
+            price_usd(order),
+            order.get_sequence_number(),
+            order.get_trader_index(),
+        ));
+    }
+
+    // Collect asks
+    let mut asks: Vec<(u64, f64, u64, u32)> = Vec::new();
+    for (_, order) in market.get_asks().iter::<RestingOrder>() {
+        asks.push((
+            order.get_num_base_atoms().as_u64(),
+            price_usd(order),
+            order.get_sequence_number(),
+            order.get_trader_index(),
+        ));
+    }
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  Order Book for {market_key}");
+    println!("═══════════════════════════════════════════════════════════");
+    println!();
+
+    // Resolve trader_index → pubkey
+    let resolve_trader = |ti: u32| -> String {
+        use manifest::deps::hypertree::{get_helper, RBNode};
+        use manifest::state::claimed_seat::ClaimedSeat;
+        let node = get_helper::<RBNode<ClaimedSeat>>(&dynamic, ti);
+        let seat = node.get_value();
+        seat.trader.to_string()
+    };
+
+    println!("── ASKS ({} orders) ────────────────────────────────", asks.len());
+    if asks.is_empty() {
+        println!("  (none)");
+    } else {
+        println!("  {:>4}  {:>12}  {:>14}  {:>12}  {:>10}  {}", "#", "Price (USD)", "Size (atoms)", "Size (base)", "Seq#", "Owner");
+        for (i, (base_atoms, pusd, seq, ti)) in asks.iter().enumerate() {
+            let size_base = *base_atoms as f64 / base_factor;
+            let owner = resolve_trader(*ti);
+            println!(
+                "  {:>4}  ${:>11.4}  {:>14}  {:>12.6}  {:>10}  {}",
+                i + 1, pusd, base_atoms, size_base, seq, &owner[..8],
+            );
+        }
+    }
+
+    println!();
+    println!("── BIDS ({} orders) ────────────────────────────────", bids.len());
+    if bids.is_empty() {
+        println!("  (none)");
+    } else {
+        println!("  {:>4}  {:>12}  {:>14}  {:>12}  {:>10}  {}", "#", "Price (USD)", "Size (atoms)", "Size (base)", "Seq#", "Owner");
+        for (i, (base_atoms, pusd, seq, ti)) in bids.iter().enumerate() {
+            let size_base = *base_atoms as f64 / base_factor;
+            let owner = resolve_trader(*ti);
+            println!(
+                "  {:>4}  ${:>11.4}  {:>14}  {:>12.6}  {:>10}  {}",
+                i + 1, pusd, base_atoms, size_base, seq, &owner[..8],
+            );
+        }
+    }
+
+    // Summarize owners
+    let mut owner_counts: std::collections::HashMap<String, (usize, usize)> = std::collections::HashMap::new();
+    for (_, _, _, ti) in &bids {
+        let owner = resolve_trader(*ti);
+        let e = owner_counts.entry(owner).or_insert((0, 0));
+        e.0 += 1;
+    }
+    for (_, _, _, ti) in &asks {
+        let owner = resolve_trader(*ti);
+        let e = owner_counts.entry(owner).or_insert((0, 0));
+        e.1 += 1;
+    }
+    println!();
+    println!("── Owners ─────────────────────────────────────────");
+    for (owner, (bid_count, ask_count)) in &owner_counts {
+        println!("  {} : {} bids, {} asks", owner, bid_count, ask_count);
+    }
+
+    println!();
+    println!("Total: {} bids, {} asks", bids.len(), asks.len());
+
+    // List all claimed seats with positions
+    {
+        use manifest::deps::hypertree::{RBNode, get_helper};
+        use manifest::state::claimed_seat::ClaimedSeat;
+
+        println!();
+        println!("── All Seats ──────────────────────────────────────");
+        println!("  {:>44}  {:>10}  {:>14}  {:>12}", "Trader", "Direction", "Position", "Margin");
+
+        let root = fixed.get_claimed_seats_root_index();
+        if root != manifest::deps::hypertree::NIL {
+            // Iterate the claimed seats tree
+            let seats_tree: manifest::state::market::ClaimedSeatTreeReadOnly =
+                manifest::state::market::ClaimedSeatTreeReadOnly::new(dynamic, root, manifest::deps::hypertree::NIL);
+            let mut net_position: i64 = 0;
+            for (_, seat) in seats_tree.iter::<ClaimedSeat>() {
+                let pos = seat.get_position_size();
+                let margin = seat.quote_withdrawable_balance.as_u64();
+                let dir = if pos > 0 { "LONG" } else if pos < 0 { "SHORT" } else { "FLAT" };
+                let pos_base = pos.unsigned_abs() as f64 / base_factor;
+                let margin_usd = margin as f64 / 10f64.powi(quote_decimals as i32);
+                println!(
+                    "  {}  {:>10}  {:>10.6} base  ${:>10.4}",
+                    seat.trader, dir, pos_base, margin_usd,
+                );
+                net_position += pos;
+            }
+            let net_base = net_position.unsigned_abs() as f64 / base_factor;
+            let net_dir = if net_position > 0 { "LONG" } else if net_position < 0 { "SHORT" } else { "ZERO" };
+            println!("  ────────────────────────────────────────────────────────────────────────────────");
+            println!("  Net position: {} {:.6} base ({} atoms)", net_dir, net_base, net_position);
+        }
+    }
+
+    Ok(())
+}
+
 fn cmd_position(client: &RpcClient, market_key: &Pubkey, trader: &Pubkey) -> Result<()> {
     let account = client.get_account(market_key)?;
     let data = &account.data;
@@ -1573,245 +1929,97 @@ fn cmd_setup(
     devnet: &RpcClient,
     er: &RpcClient,
     payer: &Keypair,
-    base_mint_index: u8,
-    initial_margin_bps: u64,
-    maintenance_margin_bps: u64,
-    taker_fee_bps: u64,
+    market: &Pubkey,
+    quote_mint: &Pubkey,
+    amount: u64,
+    mint_authority: &Keypair,
 ) -> Result<()> {
-    const BASE_MINT_DECIMALS: u8 = 9;
-    const QUOTE_MINT_DECIMALS: u8 = 6;
-    const LIQUIDATION_BUFFER_BPS: u64 = 200;
+    println!("═══════════════════════════════════════════════");
+    println!("  User onboarding for stress testing");
+    println!("  Market     : {market}");
+    println!("  Quote mint : {quote_mint}");
+    println!("  User       : {}", payer.pubkey());
+    println!("  Amount     : {amount} atoms");
+    println!("═══════════════════════════════════════════════\n");
 
-    // ── Step 1: USDC mint ──────────────────────────────────────────────────
-    println!("── Step 1: Creating USDC test mint…");
-    let usdc_mint_kp = create_mint_keypair(devnet, payer, QUOTE_MINT_DECIMALS)?;
-    let usdc_mint = usdc_mint_kp.pubkey();
-    println!("  USDC mint: {usdc_mint}");
-
-    // ── Step 2: Maker keypair ──────────────────────────────────────────────
-    println!("\n── Step 2: Generating maker keypair and funding…");
-    let maker = Keypair::new();
-    println!("  Maker: {}", maker.pubkey());
-    let fund_ix = system_instruction::transfer(&payer.pubkey(), &maker.pubkey(), 500_000_000);
-    send(devnet, &[fund_ix], &[payer])?;
-    println!("  Funded maker with 0.5 SOL");
-
-    // ── Step 3: Create market ──────────────────────────────────────────────
-    println!("\n── Step 3: Creating perps market…");
-    let pyth_feed = parse_pubkey(PYTH_SOL_USD_DEVNET)?;
-    let (market_key, _) = get_market_address(base_mint_index, &usdc_mint);
-    let (quote_vault, _) = get_vault_address(&market_key, &usdc_mint);
-    println!("  Market PDA : {market_key}");
-    println!("  Quote vault: {quote_vault}");
-    let create_ixs = create_market_instructions(
-        base_mint_index,
-        BASE_MINT_DECIMALS,
-        &usdc_mint,
+    // ── Step 1: Mint tokens to user ─────────────────────────────────────
+    println!("── Step 1: Minting {amount} quote tokens to user…");
+    let user_ata = get_associated_token_address(&payer.pubkey(), quote_mint);
+    let create_ata_ix = create_associated_token_account_idempotent(
         &payer.pubkey(),
-        initial_margin_bps,
-        maintenance_margin_bps,
-        pyth_feed,
-        taker_fee_bps,
-        LIQUIDATION_BUFFER_BPS,
-        20, // pre-expand 20 blocks during creation
+        &payer.pubkey(),
+        quote_mint,
+        &spl_token::id(),
     );
-    let sig = send(devnet, &create_ixs, &[payer])?;
-    println!("  Created with 20 pre-expanded blocks: {sig}");
+    let mint_ix = spl_token::instruction::mint_to(
+        &spl_token::id(),
+        quote_mint,
+        &user_ata,
+        &mint_authority.pubkey(),
+        &[&mint_authority.pubkey()],
+        amount,
+    )?;
+    let sig = send(devnet, &[create_ata_ix, mint_ix], &[payer, mint_authority])?;
+    println!("  ATA: {user_ata}");
+    println!("  Minted: {sig}");
 
-    // ── Step 5: Claim seats ───────────────────────────────────────────────
-    println!("\n── Step 5: Claiming seats…");
-    let sig = send(
-        devnet,
-        &[claim_seat_instruction(&market_key, &maker.pubkey())],
-        &[&maker],
-    )?;
-    println!("  Maker: {sig}");
-    let sig = send(
-        devnet,
-        &[claim_seat_instruction(&market_key, &payer.pubkey())],
-        &[payer],
-    )?;
-    println!("  Payer: {sig}");
+    // ── Step 2: Initialize ephemeral ATA ────────────────────────────────
+    println!("\n── Step 2: Initializing ephemeral ATA…");
+    let (eph_ata, _) = get_ephemeral_ata(&payer.pubkey(), quote_mint);
+    println!("  Ephemeral ATA: {eph_ata}");
+    let ix = ix_init_ephemeral_ata(&payer.pubkey(), &payer.pubkey(), quote_mint);
+    match send(devnet, &[ix], &[payer]) {
+        Ok(sig) => println!("  Initialized: {sig}"),
+        Err(_) => println!("  Already exists (skipping)"),
+    }
 
-    // ── Step 6: Fund ATAs + deposit ───────────────────────────────────────
-    println!("\n── Step 6: Funding ATAs and depositing margins…");
-    let maker_ata = create_ata_and_mint(
-        devnet,
-        payer,
-        &usdc_mint,
-        &maker.pubkey(),
-        5_000 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-    )?;
-    let dep = deposit_instruction(
-        &market_key,
-        &maker.pubkey(),
-        &usdc_mint,
-        5_000 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-        &maker_ata,
+    // ── Step 3: Deposit SPL tokens into ephemeral ATA ───────────────────
+    println!("\n── Step 3: Depositing {amount} atoms into ephemeral ATA…");
+    let ix = ix_deposit_spl_tokens(&payer.pubkey(), &payer.pubkey(), quote_mint, &user_ata, amount);
+    match send(devnet, &[ix], &[payer]) {
+        Ok(sig) => println!("  Deposited: {sig}"),
+        Err(_) => println!("  Already deposited or delegated (skipping)"),
+    }
+
+    // ── Step 4: Delegate ephemeral ATA to ER ────────────────────────────
+    println!("\n── Step 4: Delegating ephemeral ATA to MagicBlock ER…");
+    let ix = ix_delegate_ephemeral_ata(&payer.pubkey(), quote_mint);
+    match send(devnet, &[ix], &[payer]) {
+        Ok(sig) => println!("  Delegated: {sig}"),
+        Err(_) => println!("  Already delegated (skipping)"),
+    }
+
+    // ── Step 5: Claim seat on ER ────────────────────────────────────────
+    println!("\n── Step 5: Claiming seat on market (ER)…");
+    let ix = claim_seat_instruction(market, &payer.pubkey());
+    match send(er, &[ix], &[payer]) {
+        Ok(sig) => println!("  Seat claimed: {sig}"),
+        Err(_) => println!("  Seat already claimed (skipping)"),
+    }
+
+    // ── Step 6: Ephemeral manifest deposit on ER ────────────────────────
+    println!("\n── Step 6: Depositing {amount} atoms into Manifest market (ER)…");
+    let trader_ata = get_associated_token_address(&payer.pubkey(), quote_mint);
+    let vault_ata = get_associated_token_address(market, quote_mint);
+    println!("  Trader ephemeral ATA : {trader_ata}");
+    println!("  Market vault ATA     : {vault_ata}");
+    let ix = deposit_instruction_with_vault(
+        market,
+        &payer.pubkey(),
+        quote_mint,
+        amount,
+        &trader_ata,
+        &vault_ata,
         spl_token::id(),
         None,
     );
-    let sig = send(devnet, &[dep], &[&maker])?;
-    println!("  Maker deposited 5 000 USDC: {sig}");
-
-    let payer_ata = create_ata_and_mint(
-        devnet,
-        payer,
-        &usdc_mint,
-        &payer.pubkey(),
-        201 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-    )?;
-    let dep = deposit_instruction(
-        &market_key,
-        &payer.pubkey(),
-        &usdc_mint,
-        200 * 10u64.pow(QUOTE_MINT_DECIMALS as u32),
-        &payer_ata,
-        spl_token::id(),
-        None,
-    );
-    let sig = send(devnet, &[dep], &[payer])?;
-    println!("  Payer deposited 200 USDC: {sig}");
-
-    // ── Step 7: Delegate ──────────────────────────────────────────────────
-    println!("\n── Step 7: Delegating market to MagicBlock…");
-    let sig = send(
-        devnet,
-        &[delegate_market_ix(&payer.pubkey(), &market_key, &usdc_mint)],
-        &[payer],
-    )?;
-    println!("  Delegated: {sig}");
-
-    // ── Fetch oracle price ────────────────────────────────────────────────
-    println!("\n── Fetching live SOL/USD price from Pyth…");
-    let (entry_mantissa, entry_expo, entry_price_usd) =
-        fetch_pyth_price(devnet, &pyth_feed, QUOTE_MINT_DECIMALS, BASE_MINT_DECIMALS)?;
-    println!("  Oracle price : ${entry_price_usd:.4} USDC/SOL");
-    let exit_price_usd = entry_price_usd * 1.05;
-    let (exit_mantissa, exit_expo) =
-        usd_to_order_price(exit_price_usd, QUOTE_MINT_DECIMALS, BASE_MINT_DECIMALS);
-    println!("  Close price  : ${exit_price_usd:.4} USDC/SOL (+5%)");
-
-    // ── Phase 2: ER ───────────────────────────────────────────────────────
-    println!("\n  → Switched to ER: {ER_URL}");
-    let position_base_atoms: u64 = 1_000_000; // 0.001 SOL
-
-    println!("\n── Step 8: Maker places resting ASK 1 000 SOL @ ${entry_price_usd:.2} (ER)…");
-    let ask_ix = batch_update_instruction(
-        &market_key,
-        &maker.pubkey(),
-        None,
-        vec![],
-        vec![PlaceOrderParams::new(
-            1_000 * 10u64.pow(BASE_MINT_DECIMALS as u32),
-            entry_mantissa,
-            entry_expo,
-            false,
-            OrderType::Limit,
-            0,
-        )],
-        None,
-        None,
-        None,
-        None,
-    );
-    let sig = send(er, &[ask_ix], &[&maker])?;
-    println!("  Ask placed: {sig}");
-
-    println!("\n── Step 9: Payer places IOC BID → opens LONG 0.001 SOL (ER)…");
-    let bid_ix = batch_update_instruction(
-        &market_key,
-        &payer.pubkey(),
-        None,
-        vec![],
-        vec![PlaceOrderParams::new(
-            position_base_atoms,
-            entry_mantissa,
-            entry_expo,
-            true,
-            OrderType::ImmediateOrCancel,
-            0,
-        )],
-        None,
-        None,
-        None,
-        None,
-    );
-    let sig = send(er, &[bid_ix], &[payer])?;
-    println!("  Long opened: {sig}");
-
-    println!("\n── Step 10: Payer places ASK to close LONG @ ${exit_price_usd:.4} (ER)…");
-    let close_ask_ix = batch_update_instruction(
-        &market_key,
-        &payer.pubkey(),
-        None,
-        vec![],
-        vec![PlaceOrderParams::new(
-            position_base_atoms,
-            exit_mantissa,
-            exit_expo,
-            false,
-            OrderType::Limit,
-            0,
-        )],
-        None,
-        None,
-        None,
-        None,
-    );
-    let sig = send(er, &[close_ask_ix], &[payer])?;
-    println!("  Close ASK placed: {sig}");
-
-    println!("\n── Step 11: Maker places IOC BID → closes payer's LONG (ER)…");
-    let close_bid_ix = batch_update_instruction(
-        &market_key,
-        &maker.pubkey(),
-        None,
-        vec![],
-        vec![PlaceOrderParams::new(
-            position_base_atoms,
-            exit_mantissa,
-            exit_expo,
-            true,
-            OrderType::ImmediateOrCancel,
-            0,
-        )],
-        None,
-        None,
-        None,
-        None,
-    );
-    let sig = send(er, &[close_bid_ix], &[&maker])?;
-    println!("  Close BID matched: {sig}");
-
-    // ── PnL ───────────────────────────────────────────────────────────────
-    let position_sol = position_base_atoms as f64 / 1e9;
-    let entry_cost = entry_price_usd * position_sol;
-    let exit_proceeds = exit_price_usd * position_sol;
-    let raw_pnl = exit_proceeds - entry_cost;
-    let fee_rate = taker_fee_bps as f64 / 10_000.0;
-    let fees = (entry_cost + exit_proceeds) * fee_rate;
-    let net_pnl = raw_pnl - fees;
-
-    println!("\n── PnL Summary ──────────────────────────────────────────────────");
-    println!("  Position   : {position_sol:.6} SOL");
-    println!("  Entry      : ${entry_price_usd:.4}  →  cost  {entry_cost:.6} USDC");
-    println!("  Exit       : ${exit_price_usd:.4}  →  proceeds {exit_proceeds:.6} USDC");
-    println!("  Raw PnL    : {:+.6} USDC", raw_pnl);
-    println!("  Fees       : -{fees:.6} USDC");
-    println!("  ──────────────────────────────────────────────");
-    println!(
-        "  Net PnL    : {:+.6} USDC  ({:+.2}%)",
-        net_pnl,
-        net_pnl / entry_cost * 100.0
-    );
+    let sig = send(er, &[ix], &[payer])?;
+    println!("  Deposited: {sig}");
 
     println!("\n═══════════════════════════════════════════════");
-    println!("  Program : {}", manifest::id());
-    println!("  USDC    : {usdc_mint}");
-    println!("  Market  : {market_key}");
-    println!("  Vault   : {quote_vault}");
-    println!("  Explorer: https://explorer.solana.com/address/{market_key}?cluster=devnet");
+    println!("  User {} is ready to trade!", payer.pubkey());
+    println!("  Market  : {market}");
+    println!("  Margin  : {amount} quote atoms deposited");
     println!("═══════════════════════════════════════════════");
     Ok(())
 }
@@ -1927,9 +2135,15 @@ fn main() -> Result<()> {
             )?;
         }
 
-        Commands::Expand { market, blocks } => {
+        Commands::Expand {
+            market,
+            blocks,
+            escrow_validator,
+            escrow_slot,
+        } => {
             let market = parse_pubkey(&market)?;
-            cmd_expand(&client, &payer, &market, blocks)?;
+            let validator = parse_pubkey(&escrow_validator)?;
+            cmd_expand(&client, &payer, &market, blocks, &validator, escrow_slot)?;
         }
 
         Commands::ClaimSeat { market, trader } => {
@@ -2070,6 +2284,11 @@ fn main() -> Result<()> {
             cmd_market_info(&client, &market)?;
         }
 
+        Commands::Orderbook { market } => {
+            let market = parse_pubkey(&market)?;
+            cmd_orderbook(&client, &market)?;
+        }
+
         Commands::Position { market, trader } => {
             let market = parse_pubkey(&market)?;
             let trader = trader.as_deref().map(parse_pubkey).transpose()?.unwrap_or(payer.pubkey());
@@ -2077,19 +2296,29 @@ fn main() -> Result<()> {
         }
 
         Commands::Setup {
-            base_mint_index,
-            initial_margin_bps,
-            maintenance_margin_bps,
-            taker_fee_bps,
+            market,
+            quote_mint,
+            amount,
+            mint_authority,
         } => {
+            let market = parse_pubkey(&market)?;
+            let quote_mint = parse_pubkey(&quote_mint)?;
+            let mint_auth_path = if mint_authority.starts_with("~/") {
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                format!("{}{}", home, &mint_authority[1..])
+            } else {
+                mint_authority
+            };
+            let mint_auth = read_keypair_file(&mint_auth_path)
+                .map_err(|e| anyhow!("Failed to load mint authority from {}: {}", mint_auth_path, e))?;
             cmd_setup(
                 &client,
                 &er,
                 &payer,
-                base_mint_index,
-                initial_margin_bps,
-                maintenance_margin_bps,
-                taker_fee_bps,
+                &market,
+                &quote_mint,
+                amount,
+                &mint_auth,
             )?;
         }
 
@@ -2145,6 +2374,29 @@ fn main() -> Result<()> {
             let market = parse_pubkey(&market)?;
             let quote_mint = parse_pubkey(&quote_mint)?;
             cmd_ephemeral_manifest_withdraw(&client, &payer, &market, &quote_mint, amount)?;
+        }
+
+        Commands::CreateEscrow {
+            validator,
+            slot,
+            lamports,
+        } => {
+            let validator = parse_pubkey(&validator)?;
+            cmd_create_escrow(&client, &payer, &validator, slot, lamports)?;
+        }
+
+        Commands::DelegateEscrow { validator, slot } => {
+            let validator = parse_pubkey(&validator)?;
+            cmd_delegate_escrow(&client, &payer, &validator, slot)?;
+        }
+
+        Commands::FundEscrow {
+            validator,
+            slot,
+            lamports,
+        } => {
+            let validator = parse_pubkey(&validator)?;
+            cmd_fund_escrow(&client, &payer, &validator, slot, lamports)?;
         }
 
         // Handled above before the network/keypair setup; unreachable here.

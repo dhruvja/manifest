@@ -171,11 +171,11 @@ impl ManifestClient {
         self.send(&[ix], &[payer])
     }
 
-    /// Expand a market's capacity by one block.
-    pub fn expand_market(&self, payer: &Keypair, market: &Pubkey) -> Result<String> {
-        let ix = expand_market_instruction(market, &payer.pubkey());
-        self.send(&[ix], &[payer])
-    }
+    // /// Expand a market's capacity by one block.
+    // pub fn expand_market(&self, payer: &Keypair, market: &Pubkey) -> Result<String> {
+    //     let ix = expand_market_instruction(market, &payer.pubkey());
+    //     self.send(&[ix], &[payer])
+    // }
 
     /// Deposit USDC margin (on base chain, using standard SPL ATAs).
     pub fn deposit(

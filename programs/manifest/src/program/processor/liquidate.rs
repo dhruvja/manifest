@@ -352,6 +352,62 @@ pub(crate) fn process_liquidate(
 /// If the oracle price is set (oracle_price_mantissa > 0), converts it to
 /// QuoteAtomsPerBaseAtom using the market's decimal configuration.
 /// Falls back to orderbook best bid/ask if oracle is not available.
+/// Compute mark price from the orderbook (mid-price of best bid/ask).
+/// Used by funding to get the actual market price (not oracle).
+/// Falls back to cached oracle only when the orderbook is empty.
+pub(crate) fn compute_orderbook_mark_price(market: &MarketRefMut) -> Result<QuoteAtomsPerBaseAtom, ProgramError> {
+    let best_bid_index = market.fixed.get_bids_best_index();
+    let best_ask_index = market.fixed.get_asks_best_index();
+
+    // Prefer orderbook mid-price when both sides are present
+    if best_bid_index != hypertree::NIL && best_ask_index != hypertree::NIL {
+        let best_bid: &RestingOrder =
+            get_helper::<RBNode<RestingOrder>>(&market.dynamic, best_bid_index).get_value();
+        let best_ask: &RestingOrder =
+            get_helper::<RBNode<RestingOrder>>(&market.dynamic, best_ask_index).get_value();
+        let bid_inner = crate::quantities::u64_slice_to_u128(best_bid.get_price().inner);
+        let ask_inner = crate::quantities::u64_slice_to_u128(best_ask.get_price().inner);
+        let mid_inner = (bid_inner / 2) + (ask_inner / 2) + ((bid_inner % 2 + ask_inner % 2) / 2);
+        return Ok(QuoteAtomsPerBaseAtom { inner: [mid_inner as u64, (mid_inner >> 64) as u64] });
+    }
+
+    // One-sided book: use the available side
+    if best_bid_index != hypertree::NIL {
+        let best_bid: &RestingOrder =
+            get_helper::<RBNode<RestingOrder>>(&market.dynamic, best_bid_index).get_value();
+        return Ok(best_bid.get_price());
+    }
+    if best_ask_index != hypertree::NIL {
+        let best_ask: &RestingOrder =
+            get_helper::<RBNode<RestingOrder>>(&market.dynamic, best_ask_index).get_value();
+        return Ok(best_ask.get_price());
+    }
+
+    // Empty book: fall back to cached oracle
+    let oracle_mantissa = market.fixed.get_oracle_price_mantissa();
+    if oracle_mantissa > 0 {
+        let expo = market.fixed.get_oracle_price_expo() as i64;
+        let base_decimals = market.fixed.get_base_mint_decimals() as i64;
+        let quote_decimals = market.fixed.get_quote_mint_decimals() as i64;
+        let adjusted_expo = expo + quote_decimals - base_decimals;
+        let mut m = oracle_mantissa as u128;
+        let mut e = adjusted_expo;
+        while m > u32::MAX as u128 && e < i8::MAX as i64 {
+            m /= 10;
+            e += 1;
+        }
+        if m <= u32::MAX as u128 && e >= i8::MIN as i64 && e <= i8::MAX as i64 {
+            if let Ok(price) =
+                QuoteAtomsPerBaseAtom::try_from_mantissa_and_exponent(m as u32, e as i8)
+            {
+                return Ok(price);
+            }
+        }
+    }
+
+    Err(ManifestError::InvalidPerpsOperation.into())
+}
+
 pub(crate) fn compute_mark_price(market: &MarketRefMut) -> Result<QuoteAtomsPerBaseAtom, ProgramError> {
     let oracle_mantissa = market.fixed.get_oracle_price_mantissa();
     if oracle_mantissa > 0 {

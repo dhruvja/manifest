@@ -186,11 +186,12 @@ pub(crate) fn process_crank_funding(
     // in a single crank. Crankers should call more frequently for accurate funding.
     let time_elapsed = raw_time_elapsed.min(FUNDING_PERIOD_SECS);
 
-    // Compute mark price BEFORE updating oracle cache.
-    // Mark price reflects what the market was pricing at (old cached oracle or orderbook).
+    // Compute mark price from the orderbook (not the cached oracle).
+    // The mark price reflects what the market is actually trading at.
     // The new Pyth oracle is the "index price" that funding pushes toward.
+    // Funding rate = (mark - index) / index — pushes orderbook toward oracle.
     let mark_price_result =
-        super::liquidate::compute_mark_price(&dynamic_account);
+        super::liquidate::compute_orderbook_mark_price(&dynamic_account);
 
     // If we can't compute mark price (empty book), just update oracle and timestamp
     let mark_price: QuoteAtomsPerBaseAtom = match mark_price_result {

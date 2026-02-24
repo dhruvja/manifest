@@ -16,49 +16,60 @@ use hypertree::{get_helper, get_mut_helper, DataIndex, Get, RBNode};
 #[cfg(not(feature = "certora"))]
 use solana_program::sysvar::Sysvar;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, instruction::Instruction,
+    account_info::AccountInfo,
+    entrypoint::ProgramResult,
+    instruction::Instruction,
+    pubkey::Pubkey,
     sysvar::slot_history::ProgramError,
 };
+#[cfg(not(feature = "certora"))]
+use solana_program::instruction::AccountMeta;
 
 use super::batch_update::MarketDataTreeNodeType;
 
-pub(crate) fn expand_market_if_needed<'a, 'info, T: ManifestAccount + Pod + Clone>(
-    payer: &AccountInfo<'info>,
-    market_account_info: &ManifestAccountInfo<'a, 'info, T>,
-) -> ProgramResult {
-    let need_expand: bool = {
-        let market_data: &Ref<&mut [u8]> = &market_account_info.try_borrow_data()?;
-        let fixed: &MarketFixed = get_helper::<MarketFixed>(market_data, 0_u32);
-        !fixed.has_free_block()
-    };
-
-    if !need_expand {
-        return Ok(());
-    }
-    // Convert the AccountInfo into a signer. The checks for writable and signer
-    // are done this late so that in the case where it is not required, it can
-    // work.
-    expand_market(&Signer::new_payer(payer)?, market_account_info)
-}
-
-pub(crate) fn expand_market<'a, 'info, T: ManifestAccount + Pod + Clone>(
+/// Expand market using lamport escrow from ephemeral-rollups-spl.
+/// CPI claims lamports from escrow PDA into the market account, then reallocs.
+#[cfg(not(feature = "certora"))]
+pub(crate) fn expand_market_escrow<'a, 'info, T: ManifestAccount + Pod + Clone>(
     payer: &Signer<'a, 'info>,
     manifest_account: &ManifestAccountInfo<'a, 'info, T>,
+    escrow: &AccountInfo<'info>,
+    er_spl_program: &AccountInfo<'info>,
+    validator: &Pubkey,
+    escrow_slot: u64,
 ) -> ProgramResult {
-    expand_dynamic(payer, manifest_account, MARKET_BLOCK_SIZE)?;
+    expand_dynamic_escrow(
+        payer,
+        manifest_account,
+        escrow,
+        er_spl_program,
+        MARKET_BLOCK_SIZE,
+        validator,
+        escrow_slot,
+    )?;
     expand_market_fixed(manifest_account.info)?;
     Ok(())
 }
 
-pub(crate) fn batch_expand_market<'a, 'info, T: ManifestAccount + Pod + Clone>(
+/// Batch expand market using lamport escrow from ephemeral-rollups-spl.
+#[cfg(not(feature = "certora"))]
+pub(crate) fn batch_expand_market_escrow<'a, 'info, T: ManifestAccount + Pod + Clone>(
     payer: &Signer<'a, 'info>,
     manifest_account: &ManifestAccountInfo<'a, 'info, T>,
+    escrow: &AccountInfo<'info>,
+    er_spl_program: &AccountInfo<'info>,
     num_blocks: u32,
+    validator: &Pubkey,
+    escrow_slot: u64,
 ) -> ProgramResult {
-    expand_dynamic(
+    expand_dynamic_escrow(
         payer,
         manifest_account,
+        escrow,
+        er_spl_program,
         num_blocks as usize * MARKET_BLOCK_SIZE,
+        validator,
+        escrow_slot,
     )?;
     expand_market_fixed_n(manifest_account.info, num_blocks)?;
     Ok(())
@@ -108,6 +119,73 @@ fn expand_dynamic<'a, 'info, T: ManifestAccount + Pod + Clone>(
             lamports_diff,
         ),
         &[payer.clone(), expandable_account.clone()],
+    )?;
+
+    #[cfg(feature = "fuzz")]
+    {
+        solana_program::program::invoke(
+            &solana_program::system_instruction::allocate(expandable_account.key, new_size as u64),
+            &[expandable_account.clone()],
+        )?;
+    }
+    #[cfg(not(feature = "fuzz"))]
+    {
+        #[allow(deprecated)]
+        expandable_account.realloc(new_size, false)?;
+    }
+    Ok(())
+}
+
+/// ephemeral-rollups-spl `lamport_escrow_claim` instruction discriminant.
+#[cfg(not(feature = "certora"))]
+const LAMPORT_ESCROW_CLAIM_DISCRIMINANT: [u8; 8] =
+    [0x62, 0x2B, 0x40, 0xA9, 0xC1, 0xE1, 0x1D, 0x72];
+
+/// Expand dynamic account by claiming lamports from ephemeral-rollups-spl lamport escrow.
+/// Used inside MagicBlock ER where `system_instruction::transfer` doesn't work on
+/// wallet accounts.
+#[cfg(not(feature = "certora"))]
+fn expand_dynamic_escrow<'a, 'info, T: ManifestAccount + Pod + Clone>(
+    payer: &Signer<'a, 'info>,
+    manifest_account: &ManifestAccountInfo<'a, 'info, T>,
+    escrow: &AccountInfo<'info>,
+    er_spl_program: &AccountInfo<'info>,
+    block_size: usize,
+    validator: &Pubkey,
+    escrow_slot: u64,
+) -> ProgramResult {
+    let expandable_account: &AccountInfo = manifest_account.info;
+    let new_size: usize = expandable_account.data_len() + block_size;
+
+    let rent: solana_program::rent::Rent = solana_program::rent::Rent::get()?;
+    let new_minimum_balance: u64 = rent.minimum_balance(new_size);
+    let old_minimum_balance: u64 = rent.minimum_balance(expandable_account.data_len());
+    let lamports_diff: u64 = new_minimum_balance.saturating_sub(old_minimum_balance);
+
+    // CPI into ephemeral-rollups-spl: lamport_escrow_claim
+    // Accounts: [authority (signer), destination (writable), escrow (writable)]
+    // Data: [discriminant(8), validator(32), slot(8), lamports(8)]
+    let mut claim_data = Vec::with_capacity(8 + 32 + 8 + 8);
+    claim_data.extend_from_slice(&LAMPORT_ESCROW_CLAIM_DISCRIMINANT);
+    claim_data.extend_from_slice(&validator.to_bytes());
+    claim_data.extend_from_slice(&escrow_slot.to_le_bytes());
+    claim_data.extend_from_slice(&lamports_diff.to_le_bytes());
+
+    invoke(
+        &Instruction {
+            program_id: *er_spl_program.key,
+            accounts: vec![
+                AccountMeta::new_readonly(*payer.info.key, true),
+                AccountMeta::new(*expandable_account.key, false),
+                AccountMeta::new(*escrow.key, false),
+            ],
+            data: claim_data,
+        },
+        &[
+            payer.info.clone(),
+            expandable_account.clone(),
+            escrow.clone(),
+        ],
     )?;
 
     #[cfg(feature = "fuzz")]

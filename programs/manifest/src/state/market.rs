@@ -435,7 +435,7 @@ impl MarketFixed {
     pub(crate) fn get_asks_best_index(&self) -> DataIndex {
         self.asks_best_index
     }
-    pub(crate) fn get_claimed_seats_root_index(&self) -> DataIndex {
+    pub fn get_claimed_seats_root_index(&self) -> DataIndex {
         self.claimed_seats_root_index
     }
 

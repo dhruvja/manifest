@@ -142,27 +142,42 @@ impl<'a, 'info> ReleaseSeatContext<'a, 'info> {
 }
 
 /// ExpandMarketContext account infos
+/// Uses lamport escrow from ephemeral-rollups-spl for funding reallocation inside ER.
+/// Account order: [payer(signer), market(writable), escrow_pda(writable), er_spl_program]
 pub(crate) struct ExpandMarketContext<'a, 'info> {
     pub payer: Signer<'a, 'info>,
     pub market: ManifestAccountInfo<'a, 'info, MarketFixed>,
-    pub _system_program: Program<'a, 'info>,
+    pub escrow: &'a AccountInfo<'info>,
+    pub er_spl_program: &'a AccountInfo<'info>,
 }
 
 impl<'a, 'info> ExpandMarketContext<'a, 'info> {
     pub fn load(accounts: &'a [AccountInfo<'info>]) -> Result<Self, ProgramError> {
         let account_iter: &mut Iter<AccountInfo<'info>> = &mut accounts.iter();
 
-        let payer: Signer = Signer::new_payer(next_account_info(account_iter)?)?;
+        // Payer is signer but NOT writable (just authority for escrow claim)
+        let payer: Signer = Signer::new(next_account_info(account_iter)?)?;
         let market_info: &AccountInfo = next_account_info(account_iter)?;
         let market: ManifestAccountInfo<MarketFixed> =
             ManifestAccountInfo::<MarketFixed>::new(market_info)
                 .or_else(|_| ManifestAccountInfo::<MarketFixed>::new_delegated(market_info))?;
-        let _system_program: Program =
-            Program::new(next_account_info(account_iter)?, &system_program::id())?;
+
+        let escrow: &'a AccountInfo<'info> = next_account_info(account_iter)?;
+        require!(
+            escrow.is_writable,
+            ManifestError::IncorrectAccount,
+            "Escrow account must be writable",
+        )?;
+
+        // No need to validate er_spl_program key — the CPI will fail if the
+        // wrong program is passed since it won't own the escrow PDA.
+        let er_spl_program: &'a AccountInfo<'info> = next_account_info(account_iter)?;
+
         Ok(Self {
             payer,
             market,
-            _system_program,
+            escrow,
+            er_spl_program,
         })
     }
 }

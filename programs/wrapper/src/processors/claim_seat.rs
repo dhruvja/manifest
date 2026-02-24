@@ -57,16 +57,16 @@ pub(crate) fn process_claim_seat(
             // if core seat was already initialized, nothing to do here
             trader_index
         } else {
-            // Call the Expand CPI.
-            invoke(
-                &expand_market_instruction(market.key, owner.key),
-                &[
-                    manifest_program.info.clone(),
-                    owner.info.clone(),
-                    market.info.clone(),
-                    system_program.info.clone(),
-                ],
-            )?;
+            // // Call the Expand CPI.
+            // invoke(
+            //     &expand_market_instruction(market.key, owner.key),
+            //     &[
+            //         manifest_program.info.clone(),
+            //         owner.info.clone(),
+            //         market.info.clone(),
+            //         system_program.info.clone(),
+            //     ],
+            // )?;
 
             // Call the ClaimSeat CPI.
             invoke(

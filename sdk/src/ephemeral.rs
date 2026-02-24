@@ -145,7 +145,7 @@ pub fn delegate_market_ix(
         Pubkey::find_program_address(&[b"delegation-metadata", market.as_ref()], &dlp);
     let (buffer, _) = Pubkey::find_program_address(&[b"buffer", market.as_ref()], &owner);
 
-    let ephemeral_vault_ata = get_associated_token_address(market, quote_mint);
+    let (ephemeral_vault_ata, _) = get_ephemeral_ata(cfg, market, quote_mint);
     let (vault_ata_buffer, _) =
         Pubkey::find_program_address(&[b"buffer", ephemeral_vault_ata.as_ref()], &e_spl);
     let (vault_ata_delegation_record, _) =
