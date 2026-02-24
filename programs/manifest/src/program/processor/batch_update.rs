@@ -211,15 +211,19 @@ fn batch_place_order(
 
 #[cfg_attr(all(feature = "certora", not(feature = "certora-test")), early_panic)]
 pub(crate) fn process_batch_update_core(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     params: BatchUpdateParams,
 ) -> ProgramResult {
     let batch_update_context: BatchUpdateContext = BatchUpdateContext::load(accounts)?;
 
+    // Validate session or authority and get the trader authority (before destructuring)
+    let trader_authority = batch_update_context.validate_and_get_trader_authority(program_id)?;
+
     let BatchUpdateContext {
         market,
         payer,
+        session_token: _,  // Validated above, no longer needed
         global_trade_accounts_opts,
         ..
     } = batch_update_context;
@@ -234,12 +238,14 @@ pub(crate) fn process_batch_update_core(
 
     trace!("batch_update trader_index_hint:{trader_index_hint:?} cancels:{cancels:?} orders:{orders:?}");
 
+    // Validate session or authority before performing operations
     let trader_index: DataIndex = {
         let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
 
         let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
-        let trader_index: DataIndex =
-            get_trader_index_with_hint(trader_index_hint, &dynamic_account, &payer)?;
+
+        // Get trader index using the actual trader authority (not payer when using session)
+        let trader_index: DataIndex = dynamic_account.get_trader_index(&trader_authority);
 
         // Lazy funding settlement: settle accumulated funding and zero base_balance
         // before any cancel or place operations.

@@ -283,7 +283,7 @@
           "isMut": false,
           "isSigner": true,
           "docs": [
-            "Payer"
+            "Payer / trader"
           ]
         },
         {
@@ -303,6 +303,15 @@
           ]
         },
         {
+          "name": "sessionToken",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Session token for delegated signing"
+          ]
+        },
+        {
           "name": "traderQuote",
           "isMut": true,
           "isSigner": false,
@@ -315,7 +324,7 @@
           "isMut": true,
           "isSigner": false,
           "docs": [
-            "Quote vault PDA"
+            "Quote vault PDA, seeds are [b'vault', market, quote_mint]"
           ]
         },
         {
@@ -323,7 +332,16 @@
           "isMut": false,
           "isSigner": false,
           "docs": [
-            "Token program for quote"
+            "Token program(22) for quote"
+          ]
+        },
+        {
+          "name": "quoteMint",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote mint, required if Token22"
           ]
         }
       ],
@@ -345,10 +363,10 @@
       "accounts": [
         {
           "name": "payer",
-          "isMut": true,
+          "isMut": false,
           "isSigner": true,
           "docs": [
-            "Payer"
+            "Payer (authority for escrow claim)"
           ]
         },
         {
@@ -360,15 +378,30 @@
           ]
         },
         {
-          "name": "systemProgram",
+          "name": "escrow",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Lamport escrow PDA from ephemeral-rollups-spl"
+          ]
+        },
+        {
+          "name": "erSplProgram",
           "isMut": false,
           "isSigner": false,
           "docs": [
-            "System program"
+            "Ephemeral-rollups-spl program"
           ]
         }
       ],
-      "args": [],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "ExpandParams"
+          }
+        }
+      ],
       "discriminant": {
         "type": "u8",
         "value": 5
@@ -379,7 +412,7 @@
       "accounts": [
         {
           "name": "payer",
-          "isMut": true,
+          "isMut": false,
           "isSigner": true,
           "docs": [
             "Payer"
@@ -399,6 +432,60 @@
           "isSigner": false,
           "docs": [
             "System program"
+          ]
+        },
+        {
+          "name": "sessionToken",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Session token for delegated signing"
+          ]
+        },
+        {
+          "name": "quoteMint",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote mint for global account"
+          ]
+        },
+        {
+          "name": "quoteGlobal",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote global account"
+          ]
+        },
+        {
+          "name": "quoteGlobalVault",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote global vault"
+          ]
+        },
+        {
+          "name": "quoteMarketVault",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote market vault"
+          ]
+        },
+        {
+          "name": "quoteTokenProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Token program(22) for quote"
           ]
         }
       ],
@@ -767,7 +854,7 @@
           "isMut": false,
           "isSigner": true,
           "docs": [
-            "Payer (gas)"
+            "Payer"
           ]
         },
         {
@@ -775,7 +862,7 @@
           "isMut": false,
           "isSigner": true,
           "docs": [
-            "Owner of the token accounts"
+            "Owner / trader authority"
           ]
         },
         {
@@ -795,6 +882,15 @@
           ]
         },
         {
+          "name": "sessionToken",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Session token for delegated signing"
+          ]
+        },
+        {
           "name": "traderQuote",
           "isMut": true,
           "isSigner": false,
@@ -807,7 +903,7 @@
           "isMut": true,
           "isSigner": false,
           "docs": [
-            "Quote vault PDA"
+            "Quote vault PDA, seeds are [b'vault', market, quote_mint]"
           ]
         },
         {
@@ -815,7 +911,16 @@
           "isMut": false,
           "isSigner": false,
           "docs": [
-            "Token program for quote"
+            "Token program(22) for quote"
+          ]
+        },
+        {
+          "name": "quoteMint",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Quote mint, required if Token22"
           ]
         }
       ],
@@ -1832,6 +1937,10 @@
             "type": "u8"
           },
           {
+            "name": "baseMintIndex",
+            "type": "u8"
+          },
+          {
             "name": "baseMintDecimals",
             "type": "u8"
           },
@@ -1840,36 +1949,16 @@
             "type": "u8"
           },
           {
-            "name": "baseVaultBump",
-            "type": "u8"
-          },
-          {
-            "name": "quoteVaultBump",
-            "type": "u8"
-          },
-          {
             "name": "padding1",
             "type": {
               "array": [
                 "u8",
-                3
+                4
               ]
             }
           },
           {
-            "name": "baseMint",
-            "type": "publicKey"
-          },
-          {
             "name": "quoteMint",
-            "type": "publicKey"
-          },
-          {
-            "name": "baseVault",
-            "type": "publicKey"
-          },
-          {
-            "name": "quoteVault",
             "type": "publicKey"
           },
           {
@@ -1918,11 +2007,59 @@
             "type": "u64"
           },
           {
+            "name": "initialMarginBps",
+            "type": "u64"
+          },
+          {
+            "name": "maintenanceMarginBps",
+            "type": "u64"
+          },
+          {
+            "name": "totalLongBaseAtoms",
+            "type": "u64"
+          },
+          {
+            "name": "totalShortBaseAtoms",
+            "type": "u64"
+          },
+          {
+            "name": "pythFeedAccount",
+            "type": "publicKey"
+          },
+          {
+            "name": "oraclePriceMantissa",
+            "type": "u64"
+          },
+          {
+            "name": "oraclePriceExpoAndPad",
+            "type": "u64"
+          },
+          {
+            "name": "lastFundingTimestamp",
+            "type": "u64"
+          },
+          {
+            "name": "cumulativeFunding",
+            "type": "u64"
+          },
+          {
+            "name": "insuranceFundBalance",
+            "type": "u64"
+          },
+          {
+            "name": "takerFeeBps",
+            "type": "u64"
+          },
+          {
+            "name": "liquidationBufferBps",
+            "type": "u64"
+          },
+          {
             "name": "padding3",
             "type": {
               "array": [
                 "u64",
-                8
+                5
               ]
             }
           }
@@ -1998,6 +2135,26 @@
           },
           {
             "name": "ReverseTight"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExpandParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "numBlocks",
+            "type": "u32"
+          },
+          {
+            "name": "validator",
+            "type": "publicKey"
+          },
+          {
+            "name": "escrowSlot",
+            "type": "u64"
           }
         ]
       }

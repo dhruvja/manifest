@@ -47,3 +47,8 @@ pub const GAS_DEPOSIT_LAMPORTS: u64 = 5_000;
 pub const MAX_GLOBAL_SEATS: u16 = 4;
 #[cfg(not(feature = "test"))]
 pub const MAX_GLOBAL_SEATS: u16 = 999;
+
+/// Session Keys Program ID (MagicBlock/Gum session-keys program)
+/// This is the program that manages session tokens for gasless transactions
+pub const SESSION_KEYS_PROGRAM_ID: solana_program::pubkey::Pubkey =
+    solana_program::pubkey!("KeyspM2ssCJbqUhQ4k7sveSiY4WjnYsrXkC8oDbwde5");

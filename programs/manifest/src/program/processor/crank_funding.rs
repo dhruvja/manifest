@@ -237,14 +237,26 @@ pub(crate) fn process_crank_funding(
         return Ok(());
     }
 
-    // Funding rate = (mark - oracle) / oracle * time_elapsed / FUNDING_PERIOD * FUNDING_SCALE
+    // Funding rate in quote-atoms-per-base-atom units (× FUNDING_SCALE).
+    //
+    // price_diff and oracle_quote are both in "quote atoms per reference_base base atoms".
+    // We first compute the dimensionless rate (mark-oracle)/oracle, clamp it to ±1% per
+    // hour, then convert to quote-per-base units by multiplying by oracle_quote and
+    // dividing by reference_base. This ensures settle_funding_for_trader (which computes
+    // position_size * cumulative_delta / FUNDING_SCALE) yields quote atoms directly.
     let price_diff = mark_quote - oracle_quote_i128;
-    let funding_rate_raw: i128 = (price_diff * FUNDING_SCALE as i128 * time_elapsed as i128)
+    let reference_base_i128 = reference_base.as_u64() as i128;
+
+    // Dimensionless rate (× FUNDING_SCALE), clamped to ±1% per hour
+    let rate_dimensionless: i128 = (price_diff * FUNDING_SCALE as i128 * time_elapsed as i128)
         / (oracle_quote_i128 * FUNDING_PERIOD_SECS as i128);
-    // Clamp to prevent extreme funding rates from manipulated mark prices
-    let funding_rate_scaled: i64 = funding_rate_raw
+    let rate_clamped: i128 = rate_dimensionless
         .max(-(MAX_FUNDING_RATE_PER_PERIOD as i128))
-        .min(MAX_FUNDING_RATE_PER_PERIOD as i128) as i64;
+        .min(MAX_FUNDING_RATE_PER_PERIOD as i128);
+
+    // Convert to quote-per-base units: multiply by oracle_quote / reference_base
+    let funding_rate_scaled: i64 =
+        (rate_clamped * oracle_quote_i128 / reference_base_i128) as i64;
 
     // Update global cumulative funding rate (lazy settlement — no per-seat iteration).
     // Individual traders' funding is settled lazily on their next interaction

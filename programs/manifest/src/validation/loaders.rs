@@ -324,6 +324,7 @@ pub(crate) struct SwapContext<'a, 'info> {
     pub quote_vault: TokenAccountInfo<'a, 'info>,
     pub token_program_quote: TokenProgram<'a, 'info>,
     pub quote_mint: Option<MintAccountInfo<'a, 'info>>,
+    pub session_token: Option<&'a AccountInfo<'info>>,
 
     // One for each side. First is base, then is quote.
     pub global_trade_accounts_opts: [Option<GlobalTradeAccounts<'a, 'info>>; 2],
@@ -358,6 +359,21 @@ impl<'a, 'info> SwapContext<'a, 'info> {
 
         let _system_program: Program =
             Program::new(next_account_info(account_iter)?, &system_program::id())?;
+
+        // Try to load optional session token (same logic as batch_update)
+        let session_token: Option<&'a AccountInfo<'info>> = {
+            let remaining_accounts = account_iter.as_slice();
+            if !remaining_accounts.is_empty() {
+                let next_account = &remaining_accounts[0];
+                if next_account.data_len() == crate::state::SESSION_TOKEN_SIZE {
+                    Some(next_account_info(account_iter)?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
 
         let market_fixed: Ref<MarketFixed> = market.get_fixed()?;
         let quote_mint_key: Pubkey = *market_fixed.get_quote_mint();
@@ -395,8 +411,26 @@ impl<'a, 'info> SwapContext<'a, 'info> {
             quote_vault,
             token_program_quote,
             quote_mint,
+            session_token,
             global_trade_accounts_opts,
         })
+    }
+
+    /// Validates session or authority and returns the trader authority.
+    /// This eliminates duplicate validation code across processors.
+    pub fn validate_and_get_trader_authority(
+        &self,
+        program_id: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        use crate::state::SESSION_KEYS_PROGRAM_ID;
+        use crate::validation::validate_session_or_authority;
+
+        validate_session_or_authority(
+            self.owner.info,
+            self.session_token,
+            &SESSION_KEYS_PROGRAM_ID,
+            program_id,
+        )
     }
 }
 
@@ -427,6 +461,7 @@ pub(crate) struct BatchUpdateContext<'a, 'info> {
     pub payer: Signer<'a, 'info>,
     pub market: ManifestAccountInfo<'a, 'info, MarketFixed>,
     pub _system_program: Program<'a, 'info>,
+    pub session_token: Option<&'a AccountInfo<'info>>,
 
     // One for each side. First is base, then is quote.
     pub global_trade_accounts_opts: [Option<GlobalTradeAccounts<'a, 'info>>; 2],
@@ -445,6 +480,26 @@ impl<'a, 'info> BatchUpdateContext<'a, 'info> {
                 .or_else(|_| ManifestAccountInfo::<MarketFixed>::new_delegated(market_info))?;
         let system_program: Program =
             Program::new(next_account_info(account_iter)?, &system_program::id())?;
+
+        // Try to load optional session token (after system_program, before global accounts)
+        // Session token is identified by data length matching SessionToken size (128 bytes)
+        let session_token: Option<&'a AccountInfo<'info>> = {
+            // Peek at the next account without consuming it
+            let remaining_accounts = account_iter.as_slice();
+            if !remaining_accounts.is_empty() {
+                let next_account = &remaining_accounts[0];
+                // Check if it looks like a session token
+                if next_account.data_len() == crate::state::SESSION_TOKEN_SIZE {
+                    // Consume it from the iterator
+                    Some(next_account_info(account_iter)?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
         // Certora version is not mutable.
         #[cfg(feature = "certora")]
         let global_trade_accounts_opts: [Option<GlobalTradeAccounts<'a, 'info>>; 2] = [None, None];
@@ -541,8 +596,26 @@ impl<'a, 'info> BatchUpdateContext<'a, 'info> {
             payer,
             market,
             _system_program: system_program,
+            session_token,
             global_trade_accounts_opts,
         })
+    }
+
+    /// Validates session or authority and returns the trader authority.
+    /// This eliminates duplicate validation code across processors.
+    pub fn validate_and_get_trader_authority(
+        &self,
+        program_id: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        use crate::state::SESSION_KEYS_PROGRAM_ID;
+        use crate::validation::validate_session_or_authority;
+
+        validate_session_or_authority(
+            self.payer.info,
+            self.session_token,
+            &SESSION_KEYS_PROGRAM_ID,
+            program_id,
+        )
     }
 }
 
@@ -899,3 +972,4 @@ impl<'a, 'info> LiquidateContext<'a, 'info> {
         })
     }
 }
+

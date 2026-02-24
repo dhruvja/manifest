@@ -6,17 +6,17 @@ use shank::ShankInstruction;
 #[derive(TryFromPrimitive, Debug, Copy, Clone, ShankInstruction, PartialEq, Eq)]
 #[rustfmt::skip]
 pub enum ManifestInstruction {
-    /// Create a market
+    /// Create a perps market (quote-only, no base vault)
     #[account(0, writable, signer, name = "payer", desc = "Payer")]
-    #[account(1, writable, name = "market", desc = "Account holding all market state")]
+    #[account(1, writable, name = "market", desc = "Market PDA, seeds are [b'market', &[base_mint_index], quote_mint]")]
     #[account(2, name = "system_program", desc = "System program")]
-    #[account(3, name = "base_mint", desc = "Base mint")]
-    #[account(4, name = "quote_mint", desc = "Quote mint")]
-    #[account(5, writable, name = "base_vault", desc = "Base vault PDA, seeds are [b'vault', market, base_mint]")]
-    #[account(6, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
-    #[account(7, name = "token_program", desc = "Token program")]
-    // Always include both token programs so we can initialize both types of token vaults if needed.
-    #[account(8, name = "token_program_22", desc = "Token program 22")]
+    #[account(3, name = "quote_mint", desc = "Quote mint (e.g. USDC)")]
+    #[account(4, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
+    #[account(5, name = "token_program", desc = "Token program")]
+    #[account(6, name = "token_program_22", desc = "Token program 22")]
+    #[account(7, name = "associated_token_program", desc = "Associated token program")]
+    #[account(8, writable, name = "ephemeral_vault_ata", desc = "Ephemeral vault ATA for delegation")]
+    #[account(9, name = "ephemeral_spl_token", desc = "Ephemeral SPL token program")]
     CreateMarket = 0,
 
     /// Allocate a seat
@@ -25,64 +25,52 @@ pub enum ManifestInstruction {
     #[account(2, name = "system_program", desc = "System program")]
     ClaimSeat = 1,
 
-    /// Deposit
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    /// Deposit quote tokens (USDC) into the market
+    #[account(0, signer, name = "payer", desc = "Payer")]
     #[account(1, writable, name = "market", desc = "Account holding all market state")]
-    #[account(2, writable, name = "trader_token", desc = "Trader token account")]
-    #[account(3, writable, name = "vault", desc = "Vault PDA, seeds are [b'vault', market, mint]")]
-    #[account(4, name = "token_program", desc = "Token program(22), should be the version that aligns with the token being used")]
-    #[account(5, name = "mint", desc = "Required for token22 transfer_checked")]
+    #[account(2, writable, name = "trader_token", desc = "Trader quote token account")]
+    #[account(3, writable, name = "vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
+    #[account(4, name = "token_program", desc = "Token program(22)")]
+    #[account(5, name = "quote_mint", desc = "Quote mint")]
     Deposit = 2,
 
-    /// Withdraw
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    /// Withdraw quote tokens (USDC) from the market
+    #[account(0, signer, name = "payer", desc = "Payer")]
     #[account(1, writable, name = "market", desc = "Account holding all market state")]
-    #[account(2, writable, name = "trader_token", desc = "Trader token account")]
-    #[account(3, writable, name = "vault", desc = "Vault PDA, seeds are [b'vault', market, mint]")]
-    #[account(4, name = "token_program", desc = "Token program(22), should be the version that aligns with the token being used")]
-    #[account(5, name = "mint", desc = "Required for token22 transfer_checked")]
+    #[account(2, writable, name = "trader_token", desc = "Trader quote token account")]
+    #[account(3, writable, name = "vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
+    #[account(4, name = "token_program", desc = "Token program(22)")]
+    #[account(5, name = "quote_mint", desc = "Quote mint")]
     Withdraw = 3,
 
-    /// Places an order using funds in a wallet instead of on deposit
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    /// Swap (perps): place an IOC order against the orderbook
+    #[account(0, signer, name = "payer", desc = "Payer / trader")]
     #[account(1, writable, name = "market", desc = "Account holding all market state")]
     #[account(2, name = "system_program", desc = "System program")]
-    #[account(3, writable, name = "trader_base", desc = "Trader base token account")]
+    #[account(3, optional, name = "session_token", desc = "Session token for delegated signing")]
     #[account(4, writable, name = "trader_quote", desc = "Trader quote token account")]
-    #[account(5, writable, name = "base_vault", desc = "Base vault PDA, seeds are [b'vault', market_address, base_mint]")]
-    #[account(6, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market_address, quote_mint]")]
-    #[account(7, name = "token_program_base", desc = "Token program(22) base")]
-    #[account(8, optional, name = "base_mint", desc = "Base mint, only included if base is Token22, otherwise not required")]
-    #[account(9, optional, name = "token_program_quote", desc = "Token program(22) quote. Optional. Only include if different from base")]
-    #[account(10, optional, name = "quote_mint", desc = "Quote mint, only included if base is Token22, otherwise not required")]
-    #[account(11, writable, optional, name = "global", desc = "Global account")]
-    #[account(12, writable, optional, name = "global_vault", desc = "Global vault")]
+    #[account(5, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
+    #[account(6, name = "token_program_quote", desc = "Token program(22) for quote")]
+    #[account(7, optional, name = "quote_mint", desc = "Quote mint, required if Token22")]
     Swap = 4,
 
-    /// Expand a market.
-    /// 
-    /// This is not used in normal operations because expansion happens within
-    /// instructions that could require it.
-    /// This is useful for when rent payer != transaction signer.
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    /// Expand a market using lamport escrow from ephemeral-rollups-spl.
+    #[account(0, signer, name = "payer", desc = "Payer (authority for escrow claim)")]
     #[account(1, writable, name = "market", desc = "Account holding all market state")]
-    #[account(2, name = "system_program", desc = "System program")]
+    #[account(2, writable, name = "escrow", desc = "Lamport escrow PDA from ephemeral-rollups-spl")]
+    #[account(3, name = "er_spl_program", desc = "Ephemeral-rollups-spl program")]
     Expand = 5,
 
     /// Batch update with multiple place orders and cancels.
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
+    #[account(0, signer, name = "payer", desc = "Payer")]
     #[account(1, writable, name = "market", desc = "Account holding all market state")]
     #[account(2, name = "system_program", desc = "System program")]
-    #[account(3, optional, name = "base_mint", desc = "Mint for the base global account")]
-    #[account(4, optional, writable, name = "base_global", desc = "Base global account")]
-    #[account(5, optional, name = "base_global_vault", desc = "Base global vault")]
-    #[account(6, optional, name = "base_market_vault", desc = "Base market vault")]
-    #[account(7, optional, name = "base_token_program", desc = "Token program(22)")]
-    #[account(8, optional, name = "quote_mint", desc = "Mint for this global account")]
-    #[account(9, optional, writable, name = "quote_global", desc = "Quote global account")]
-    #[account(10, optional, name = "quote_global_vault", desc = "Quote global vault")]
-    #[account(11, optional, name = "quote_market_vault", desc = "Quote market vault")]
-    #[account(12, optional, name = "quote_token_program", desc = "Token program(22)")]
+    #[account(3, optional, name = "session_token", desc = "Session token for delegated signing")]
+    #[account(4, optional, name = "quote_mint", desc = "Quote mint for global account")]
+    #[account(5, optional, writable, name = "quote_global", desc = "Quote global account")]
+    #[account(6, optional, name = "quote_global_vault", desc = "Quote global vault")]
+    #[account(7, optional, name = "quote_market_vault", desc = "Quote market vault")]
+    #[account(8, optional, name = "quote_token_program", desc = "Token program(22) for quote")]
     BatchUpdate = 6,
 
     /// Create global account for a given token.
@@ -143,24 +131,16 @@ pub enum ManifestInstruction {
     GlobalClean = 12,
 
     
-    /// Places an order using funds in a wallet instead of on deposit. Separates
-    /// the owner of the token accounts and the payer. This allows routers to
-    /// swap and have intermediate hops go through PDAs, rather than all token
-    /// accounts owned by the user.
-    #[account(0, writable, signer, name = "payer", desc = "Payer")]
-    #[account(1, writable, signer, name = "owner", desc = "Owner")]
+    /// SwapV2 (perps): swap with separate owner and payer
+    #[account(0, signer, name = "payer", desc = "Payer")]
+    #[account(1, signer, name = "owner", desc = "Owner / trader authority")]
     #[account(2, writable, name = "market", desc = "Account holding all market state")]
     #[account(3, name = "system_program", desc = "System program")]
-    #[account(4, writable, name = "trader_base", desc = "Trader base token account")]
+    #[account(4, optional, name = "session_token", desc = "Session token for delegated signing")]
     #[account(5, writable, name = "trader_quote", desc = "Trader quote token account")]
-    #[account(6, writable, name = "base_vault", desc = "Base vault PDA, seeds are [b'vault', market_address, base_mint]")]
-    #[account(7, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market_address, quote_mint]")]
-    #[account(8, name = "token_program_base", desc = "Token program(22) base")]
-    #[account(9, optional, name = "base_mint", desc = "Base mint, only included if base is Token22, otherwise not required")]
-    #[account(10, optional, name = "token_program_quote", desc = "Token program(22) quote. Optional. Only include if different from base")]
-    #[account(11, optional, name = "quote_mint", desc = "Quote mint, only included if base is Token22, otherwise not required")]
-    #[account(12, writable, optional, name = "global", desc = "Global account")]
-    #[account(13, writable, optional, name = "global_vault", desc = "Global vault")]
+    #[account(6, writable, name = "quote_vault", desc = "Quote vault PDA, seeds are [b'vault', market, quote_mint]")]
+    #[account(7, name = "token_program_quote", desc = "Token program(22) for quote")]
+    #[account(8, optional, name = "quote_mint", desc = "Quote mint, required if Token22")]
     SwapV2 = 13,
 
     /// Delegate market account to MagicBlock ephemeral rollups.

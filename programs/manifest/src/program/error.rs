@@ -62,6 +62,18 @@ pub enum ManifestError {
     NotLiquidatable = 27,
     #[error("Perps markets only support quote (USDC) operations")]
     PerpsOnlyQuote = 28,
+    #[error("Session token has expired")]
+    SessionExpired = 29,
+    #[error("Session token is invalid")]
+    InvalidSession = 30,
+    #[error("Session not authorized for this program")]
+    InvalidSessionProgram = 31,
+    #[error("Session signer does not match")]
+    InvalidSessionSigner = 32,
+    #[error("Session duration exceeds maximum (1 week)")]
+    SessionDurationTooLong = 33,
+    #[error("Session authority does not match")]
+    InvalidSessionAuthority = 34,
 }
 
 impl From<ManifestError> for ProgramError {

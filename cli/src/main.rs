@@ -17,7 +17,8 @@ use manifest::{
         claim_seat_instruction::claim_seat_instruction,
         crank_funding_instruction, create_market_instructions,
         deposit_instruction, deposit_instruction_with_vault, expand_market_n_instruction,
-        liquidate_instruction, release_seat_instruction, withdraw_instruction, withdraw_instruction_with_vault,
+        liquidate_instruction, release_seat_instruction,
+        withdraw_instruction, withdraw_instruction_with_vault,
         swap_instruction::swap_instruction_with_vaults,
         ManifestInstruction,
     },
@@ -1880,10 +1881,10 @@ fn cmd_position(client: &RpcClient, market_key: &Pubkey, trader: &Pubkey) -> Res
     println!("  Unrealized PnL  : ${unrealized_pnl:+.4}");
     println!(
         "  Pending Funding : ${pending_funding:+.4}{}",
-        if pending_funding < 0.0 {
-            " (will reduce equity)"
-        } else if pending_funding > 0.0 {
-            " (will increase equity)"
+        if pending_funding > 0.0 {
+            " (owed, will reduce equity)"
+        } else if pending_funding < 0.0 {
+            " (receivable, will increase equity)"
         } else {
             ""
         }

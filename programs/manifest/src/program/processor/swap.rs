@@ -66,11 +66,14 @@ pub(crate) fn process_swap(
 
 #[cfg_attr(all(feature = "certora", not(feature = "certora-test")), early_panic)]
 pub(crate) fn process_swap_core(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     params: SwapParams,
 ) -> ProgramResult {
     let swap_context: SwapContext = SwapContext::load(accounts)?;
+
+    // Validate session or authority and get the trader authority (before destructuring)
+    let trader_authority = swap_context.validate_and_get_trader_authority(program_id)?;
 
     let SwapContext {
         market,
@@ -80,6 +83,7 @@ pub(crate) fn process_swap_core(
         quote_vault,
         token_program_quote,
         quote_mint: _,
+        session_token: _,  // Validated above, no longer needed
         global_trade_accounts_opts,
     } = swap_context;
 
@@ -87,19 +91,19 @@ pub(crate) fn process_swap_core(
         let market_data: &mut RefMut<&mut [u8]> = &mut market.try_borrow_mut_data()?;
         let mut dynamic_account: MarketRefMut = get_mut_dynamic_account(market_data);
 
-        // Claim seat if needed
-        let existing_seat_index: DataIndex = dynamic_account.get_trader_index(owner.key);
+        // Claim seat if needed (using actual trader authority, not session signer)
+        let existing_seat_index: DataIndex = dynamic_account.get_trader_index(&trader_authority);
         if existing_seat_index == NIL {
-            dynamic_account.claim_seat(owner.key)?;
+            dynamic_account.claim_seat(&trader_authority)?;
         }
-        let trader_index: DataIndex = dynamic_account.get_trader_index(owner.key);
+        let trader_index: DataIndex = dynamic_account.get_trader_index(&trader_authority);
 
         // Lazy funding settlement: settle accumulated funding and zero base_balance
         // before any balance operations. This must happen before get_trader_balance.
         dynamic_account.settle_funding_for_trader(trader_index)?;
 
         let (initial_base_atoms, initial_quote_atoms) =
-            dynamic_account.get_trader_balance(owner.key);
+            dynamic_account.get_trader_balance(&trader_authority);
 
         (
             existing_seat_index,

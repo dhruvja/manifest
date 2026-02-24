@@ -108,7 +108,7 @@ fn expand_market_if_needed<'a, 'info>(
     if !dynamic_account.has_two_free_blocks() {
         drop(market_data);
         invoke(
-            &expand_market_instruction(market.key, &payer.key, &payer.key, &system_program::id(), 0),
+            &expand_market_instruction(market.key, &payer.key, &payer.key, &system_program::id(), &Pubkey::default(), 0),
             &[
                 manifest_program.info.clone(),
                 payer.info.clone(),
